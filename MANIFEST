@@ -15,6 +15,7 @@ ex/eudora_send_email
 ex/filemaker_extract_data
 ex/finder_clean_up
 ex/finder_get_system_folder_files
+ex/finder_label
 ex/finder_label_and_beep
 ex/finder_label_and_beep_cool_version
 ex/finder_volume_names

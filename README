@@ -23,7 +23,7 @@ Please read this README and the POD documentation.  Mac::Glue is not
 self-explanatory.  Some assembly is required.  Mac::Glue comes with
 MacPerl 5.6.1 and later, and is compatible with MacPerl 5.2.0r4.
 
-New to this release is support for perl on Mac OS X.
+If the Encode module is installed, Mac::Glue can send Unicode text.
 
 
 ************************************************************************
@@ -44,6 +44,7 @@ installed with the module, so you may have to run as root or sudo
 (e.g., `sudo gluemac /Applications/iTunes.app`).
 
 Use gluedoc to get documentation for a glue (e.g., `gluedoc Finder`).
+gluedoc is a frontend to perldoc.
 
 
 ************************************************************************
@@ -68,10 +69,9 @@ This is not necessary for MacPerl 5.6.1 and greater.
 ************************************************************************
 ALL VERSIONS OF MACPERL:
 
-* NOTE: This version of Mac::Glue HAS NOT BEEN TESTED with MacPerl.  I
-* am moving in a few weeks and don't have the time, but I wanted to get
-* it out for the Mac OS X support.  If you have problems, revert to the
-* old version.  Thanks/sorry in advance.
+* NOTE: This version of Mac::Glue HAS NOT BEEN TESTED with MacPerl.  It
+* will be eventually.  If you have problems, revert to the old version.
+* Thanks/sorry in advance.
 
 If the module is not already installed, drop the Mac-Glue archive, or
 the unpacked folder, on the installme droplet that came with cpan-mac

@@ -1,3 +1,19 @@
+* v1.15, Tuesday, November 18, 2003
+
+   Make "set" event look at direct object's type instead of defaulting
+   to guessing between plain numeric/text (should be less need for
+   param_type() now).
+
+   Make guesses for numeric/text also check for floats.
+
+   Where there are multiple types for something, get the first one we
+   know how to deal with.
+
+   Add more numeric types.
+
+   Fix typeUnicodeText to automatically encode text to UTF-16 as
+   expexted (if Encode module is available).
+
 * v1.14, Friday, October 31, 2003
 
    Added support for remote Apple events under Mac OS X.  Example:

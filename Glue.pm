@@ -27,13 +27,13 @@ use vars qw(
 	$GENPKG $GENSEQ %OPENGLUES $MERGEDCLASSES $OTHEREVENT
 	$OTHERCLASS %SPECIALEVENT %SPECIALCLASS %DESCS
 	$MERGEDENUM $OTHERENUM %INSL %DESC_TYPE %COMP %LOGI
-	$RESERVED
+	$RESERVED $ENCODE
 );
 
 #=============================================================================#
-# $Id: Glue.pm,v 1.16 2003/10/31 10:00:40 pudge Exp $
-($REVISION) 	= ' $Revision: 1.16 $ ' =~ /\$Revision:\s+([^\s]+)/;
-$VERSION	= '1.14';
+# $Id: Glue.pm,v 1.18 2003/11/18 23:57:32 pudge Exp $
+($REVISION) 	= ' $Revision: 1.18 $ ' =~ /\$Revision:\s+([^\s]+)/;
+$VERSION	= '1.15';
 @ISA		= 'Exporter';
 @EXPORT		= ();
 $RESERVED	= 'REPLY|SWITCH|MODE|PRIORITY|TIMEOUT|RETOBJ|ERRORS|CALLBACK|CLBK_ARG';
@@ -56,6 +56,7 @@ $RESERVED	= 'REPLY|SWITCH|MODE|PRIORITY|TIMEOUT|RETOBJ|ERRORS|CALLBACK|CLBK_ARG'
 
 $GENPKG		= __PACKAGE__;
 $GENSEQ		= 0;
+$ENCODE		= eval { require Encode };
 
 #=============================================================================#
 # exported functions
@@ -320,7 +321,7 @@ sub _primary {
 	if (defined $dobj) {
 		croak "Direct object parameter not present"
 			unless exists $params->{keyDirectObject()};
-		_params($self, $evt, $params->{keyDirectObject()}, $dobj);
+		_params($self, $evt, $params->{keyDirectObject()}, $dobj, $class, $event);
 		push @origargs, 'DOBJ', $dobj;
 	}
 
@@ -331,7 +332,7 @@ sub _primary {
 			next if $p =~ /^(?:$RESERVED)$/;
 			my $pp = $p eq 'DOBJ' ? keyDirectObject : lc $p;
 			croak "'$p' parameter not available" unless exists $params->{$pp};
-			_params($self, $evt, $params->{$pp}, $hash->{$p});
+			_params($self, $evt, $params->{$pp}, $hash->{$p}, $class, $event);
 			push @origargs, $pp, $p;
 		}
 	}
@@ -441,13 +442,25 @@ sub _primary {
 # prepare all event parameters
 
 sub _params {
-	my($self, $evt, $p, $data) = @_;
+	my($self, $evt, $p, $data, $class, $event) = @_;
 	my($key, $type) = @{$p}[0, 1];
 
 	if (ref $data eq 'Mac::AEParamType') {
 		($data, $type) = @{$data}[1, 0];
 	} elsif ($type eq typeObjectSpecifier && ref $data ne 'Mac::AEObjDesc') {
-		$type = $data =~ /^[+-]?\d+$/ ? typeInteger : typeChar;
+		$type = _check_default_type($data);
+
+	# if we have a set data event, refer to direct object for type to use
+	} elsif ($type eq typeWildCard && $class eq 'core' && $event eq 'setd' && $key eq 'data' && ref $data ne 'Mac::AEObjDesc') {
+		if (my $dobj = AEGetParamDesc($evt->{EVT}, keyDirectObject)) {
+			if ($dobj->type eq typeObjectSpecifier) {
+				if (my $keydata = AEGetKeyDesc($dobj, keyAEKeyData)) {
+					$type = _get_type($self, $data, $type, _get_name($self, $keydata->get));
+					AEDisposeDesc $keydata;
+				}
+			}
+			AEDisposeDesc $dobj;
+		}
 	}
 
 	my($desc, $dispose) = _get_desc($self, $data, $type);
@@ -932,7 +945,7 @@ sub _get_desc {
 	if ($ref eq 'Mac::AEParamType') {
 		($data, $type) = @{$data}[1, 0];
 	} elsif ($type eq typeObjectSpecifier && $ref ne 'Mac::AEObjDesc') {
-		$type = $data =~ /^[+-]?\d+$/ ? typeInteger : typeChar;
+		$type = _check_default_type($data);
 	}
 
 	if ($ref eq 'ARRAY') {
@@ -971,17 +984,28 @@ EOT
 
 sub _get_type {
 	my($self, $data, $type, $key) = @_;
-	my $i = 0;
 
 	if (defined $key) {
 		my $href = _get_id($self, $key, 1);
-		$type = $href->{types}[$i++] if exists $href->{types};
+		if (exists $href->{types}) {
+			($type) = grep { exists $AE_PUT{$_} } @{$href->{types}};
+		}
 	}
 
 	if (!$type || $type eq typeWildCard) {
-		$type = $data =~ /^[+-]?\d+$/ ? typeInteger : typeChar;
+		$type = _check_default_type($data);
 	}
 
+	return $type;
+}
+
+sub _check_default_type {
+	my($data) = @_;
+	my $type = $data =~ /^[+-]?\d+$/
+		? typeInteger
+		: $data =~ /^[+-]?\d+\.\d+$/
+			? typeFloat
+			: typeChar;
 	return $type;
 }
 
@@ -1383,6 +1407,9 @@ sub _merge_enums {
 );
 
 %AE_PUT = (
+	typeShortFloat()	=> sub {MacPack(typeShortFloat,		$_[0])},
+	typeFloat()		=> sub {MacPack(typeFloat,		$_[0])},
+	typeMagnitude()		=> sub {MacPack(typeMagnitude,		$_[0])},
 	typeShortInteger()	=> sub {MacPack(typeShortInteger,	$_[0])},
 	typeInteger()		=> sub {MacPack(typeInteger,		$_[0])},
 	typeBoolean()		=> sub {MacPack(typeBoolean,		$_[0])},
@@ -1413,8 +1440,11 @@ sub _merge_enums {
 	# just a guess here ... empty four bytes for lang code, maybe?
 	typeIntlText()		=> sub {'    ' . MacPack(typeChar, $_[0])},
 	typeUnicodeText()	=> sub {
-		my $desc = new AEDesc typeChar, $_[0];
-		return AECoerceDesc($desc, 'utxt');
+		if ($ENCODE) {
+			return new AEDesc typeUnicodeText, Encode::encode('UTF-16', $_[0]);
+		} else { # oh well!
+			return new AEDesc typeChar, $_[0];
+		}
 	}
 );
 
@@ -2339,4 +2369,4 @@ Interapplication Communication.
 
 =head1 VERSION
 
-v1.14, Friday, October 31, 2003
+v1.15, Tuesday, November 18, 2003

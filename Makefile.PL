@@ -26,6 +26,8 @@ WriteMakefile(
 		'MLDBM'                      => 0,
 		'Storable'                   => 0,
     		'Test::More'                 => 0,
+# not required, but recommended
+#    		'Encode'                     => 0,
 	},
 	'clean'	=> {
 		'FILES'	=> "Mac-Glue-* @scripts .makeglues"
