@@ -31,9 +31,9 @@ use vars qw(
 );
 
 #=============================================================================#
-# $Id: Glue.pm,v 1.15 2003/09/02 07:35:41 pudge Exp $
-($REVISION) 	= ' $Revision: 1.15 $ ' =~ /\$Revision:\s+([^\s]+)/;
-$VERSION	= '1.13';
+# $Id: Glue.pm,v 1.16 2003/10/31 10:00:40 pudge Exp $
+($REVISION) 	= ' $Revision: 1.16 $ ' =~ /\$Revision:\s+([^\s]+)/;
+$VERSION	= '1.14';
 @ISA		= 'Exporter';
 @EXPORT		= ();
 $RESERVED	= 'REPLY|SWITCH|MODE|PRIORITY|TIMEOUT|RETOBJ|ERRORS|CALLBACK|CLBK_ARG';
@@ -180,13 +180,16 @@ sub ADDRESS {
 	my($self, $addtype, @add) = @_;
 
 	$self->{ADDRESS} = defined $addtype
-		? $addtype eq 'ppc'	 || $addtype eq typeTargetID
+		? $addtype eq 'ppc'  || $addtype eq typeTargetID
 			? { typeTargetID() => pack_ppc($self->{ID}, @add) }
 
-		: $addtype eq 'eppc' || $addtype eq typeTargetID
+		: $addtype eq 'eppc' && $^O eq 'MacOS'
 			? { typeTargetID() => pack_eppc($self->{ID}, @add) }
 
-		: $addtype eq 'psn'	 || $addtype eq typeProcessSerialNumber
+		: $addtype eq 'eppc'
+			? { typeApplicationURL() => pack_eppc_x(@add) }
+
+		: $addtype eq 'psn'  || $addtype eq typeProcessSerialNumber
 			? { typeProcessSerialNumber() => pack_psn($add[0]) } 
 
 		: $addtype eq 'path'
@@ -479,7 +482,7 @@ EOT
 	my $count = 0;
 
 	for my $d (@{$data}) {
-		my($desc, $dispose) = _get_desc($self, $d);
+		my($desc, $dispose) = _get_desc($self, $d, $type);
 		AEPutDesc($list, ++$count, $desc)
 			or confess "Can't put $desc into $list: $MacError";
 		if ($self->{_print_aes}) {
@@ -925,6 +928,12 @@ sub _get_desc {
 	$dispose = 1;
 	$data = _get_objdesc($data);
 	$ref = ref $data;
+
+	if ($ref eq 'Mac::AEParamType') {
+		($data, $type) = @{$data}[1, 0];
+	} elsif ($type eq typeObjectSpecifier && $ref ne 'Mac::AEObjDesc') {
+		$type = $data =~ /^[+-]?\d+$/ ? typeInteger : typeChar;
+	}
 
 	if ($ref eq 'ARRAY') {
 		$desc = _do_list($self, $data, $type);
@@ -1587,12 +1596,10 @@ So, now that you are convinced this is cool, let's continue.
 
 =head2 Mac OS X
 
-Mac OS X is supported by Mac::Glue now, although a few things will not
-work.  eppc targets are not supported.  Some apps that don't have creator
-IDs work, but some things may not work with them, as they have not been
-extensively tested.  And, of course, some glues and methods will behave
-differently, due to differences in application implementation (for example,
-the Finder's "clean up" event is not supported in Mac OS X at this writing).
+Mac OS X is supported by Mac::Glue now.  Note that some glues and methods
+will behave differently, due to differences in application implementation
+(for example, the Finder's "clean up" event is not supported in Mac OS X
+at this writing).
 
 
 =head2 Creating a Glue
@@ -1649,15 +1656,27 @@ You can also pass a path to an application:
 
 	my $glue = Mac::Glue->new('My App', path => $path_to_file);
 
-New for Mac OS 9, you can send events over TCP/IP:
+You can send events over TCP/IP:
 
 	my $glue = Mac::Glue->new('My App', eppc => 'My App Name',
-		'some.machine.com');
+		'mac.example.com');
 
 Also, the address can be changed after the fact:
 
 	my $glue = Mac::Glue->new('My App');
-	$glue->ADDRESS(eppc => 'My App Name', 'some.machine.com');
+	$glue->ADDRESS(eppc => 'My App Name', 'mac.example.com');
+
+For Mac OS X, you can also provide the user name and password:
+
+	my $glue = Mac::Glue->new('My App', eppc => 'My App Name',
+		'mac.example.com', $uid, $pid, 'pudge', 'foobar');
+
+UID, PID, username, and password may be omitted (it is recommended
+to use the Keychain to avoid including username and password, and
+UID or PID are only needed if there is more than one potential
+target application with the same name).
+
+B<Note>: the UID/PID stuff doesn't actually work for me, in my tests.  Huh.
 
 Once you have your glue set up, you start calling events, as they are
 documented in the POD file for the glue.  The events can be called
@@ -2320,4 +2339,4 @@ Interapplication Communication.
 
 =head1 VERSION
 
-v1.13, Tuesday, September 2, 2003
+v1.14, Friday, October 31, 2003

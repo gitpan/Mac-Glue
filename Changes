@@ -1,3 +1,14 @@
+* v1.14, Friday, October 31, 2003
+
+   Added support for remote Apple events under Mac OS X.  Example:
+
+	my $glue = Mac::Glue->new('Finder',
+	    eppc => 'Finder', 'mac.example.com'
+	);
+
+   Fixed proper preparation of the data with the right data type when using
+   param_type().
+
 * v1.13, September 2, 2003
 
    Removed Memoize.  The speed gains were exceptionally modest, and some
