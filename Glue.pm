@@ -10,8 +10,8 @@ use Exporter;
 use Fcntl;
 use File::Basename;
 use File::Spec::Functions;
-use Mac::AppleEvents::Simple 1.13 ':all';
-use Mac::Apps::Launch 1.81;
+use Mac::AppleEvents::Simple 1.14 ':all';
+use Mac::Apps::Launch 1.90;
 use Mac::Errors qw(%MacErrors $MacError);
 use Mac::Files 1.09;
 use Mac::Memory 1.20 ();
@@ -31,9 +31,9 @@ use vars qw(
 );
 
 #=============================================================================#
-# $Id: Glue.pm,v 1.23 2004/05/19 07:27:16 pudge Exp $
-($REVISION) 	= ' $Revision: 1.23 $ ' =~ /\$Revision:\s+([^\s]+)/;
-$VERSION	= '1.20';
+# $Id: Glue.pm,v 1.24 2004/06/08 20:07:17 pudge Exp $
+($REVISION) 	= ' $Revision: 1.24 $ ' =~ /\$Revision:\s+([^\s]+)/;
+$VERSION	= '1.21';
 @ISA		= 'Exporter';
 @EXPORT		= ();
 $RESERVED	= 'REPLY|SWITCH|MODE|PRIORITY|TIMEOUT|RETOBJ|ERRORS|CALLBACK|CLBK_ARG';
@@ -1563,7 +1563,9 @@ sub getdata {
 	return unless $desc && $desc->type eq typeObjectSpecifier;
 
 	my $data = AEGetKeyDesc($desc, $key || keyAEKeyData);
-	return $data->Mac::AppleEvents::Simple::_getdata;
+	my $return = $data->Mac::AppleEvents::Simple::_getdata;
+	AEDisposeDesc $data;
+	return $return;
 }
 
 sub AUTOLOAD { # can?
@@ -2456,7 +2458,7 @@ Update glueedit
 
 Chris Nandor E<lt>pudge@pobox.comE<gt>, http://pudge.net/
 
-Copyright (c) 1998-2003 Chris Nandor.  All rights reserved.  This program
+Copyright (c) 1998-2004 Chris Nandor.  All rights reserved.  This program
 is free software; you can redistribute it and/or modify it under the same
 terms as Perl itself.
 
@@ -2490,7 +2492,8 @@ Matthew Wickline,
 Simon Cozens,
 has,
 Bill Birkett,
-Lars Eggert.
+Lars Eggert,
+wren argetlahm.
 
 (If I left your name out, please remind me.)
 

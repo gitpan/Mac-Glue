@@ -4,8 +4,9 @@ use Mac::MoreFiles;
 
 my($lib, $script) = @ARGV;
 my @apps = 'MACS'; # Finder
-# System Events, Image Events, DiskImageMounter
-push @apps, 'sevs', 'imev', 'ddsk' if $^O ne 'MacOS';
+# System Events, Image Events
+# had DiskImageMounter in here ... but app won't stay open long enough to get AETE ...
+push @apps, 'sevs', 'imev' if $^O ne 'MacOS';
 my @paths = map { $Application{$_} } @apps;
 
 system($^X, $lib, "$script/gluedialect", '-I');

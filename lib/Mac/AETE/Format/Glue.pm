@@ -17,7 +17,7 @@ use vars qw(@ISA $VERSION $TYPE);
 $TYPE = 'McPp';
 
 @ISA = qw(Mac::AETE::Parser);
-$VERSION = '0.32';
+$VERSION = '0.33';
 
 sub fixname {
     (my $ev = shift) =~ s/[^a-zA-Z0-9_]/_/g;
@@ -180,7 +180,7 @@ sub finish {
 
     foreach (@{$self}{qw(START FINISH)}) {
         s/__APPNAME__/$self->{TITLE}/g;
-        s/__APPID__/$dbm{ID}/g;
+        s/__APPID__/$dbm{ID}/g if $dbm{ID};
     }
 
     local *FILE;

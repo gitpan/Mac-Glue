@@ -1,3 +1,12 @@
+* v1.21, Tuesday, June 8, 2004
+
+   Make launching work better for bundles. (wren argetlahm)
+
+   Minor little fixes.
+
+   No longer create glue for DiskImageMounter (wasn't really useful,
+   and often failed).
+
 * v1.20, Tuesday, May 19, 2004
 
    Added more robust handling of bundle ID targetting, including making it
