@@ -21,7 +21,7 @@ WriteMakefile(
     		'Mac::Apps::Launch'          => 1.81,
     		'Mac::AppleEvents'           => 1.29,
     		'Mac::AppleEvents::Simple'   => 1.11,
-    		'Mac::Files'                 => 1.08,
+    		'Mac::Files'                 => 1.09,
     		'Mac::Processes'             => 1.04,
 		'MLDBM'                      => 0,
 		'Storable'                   => 0,

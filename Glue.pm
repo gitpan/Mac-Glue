@@ -13,7 +13,7 @@ use File::Spec::Functions;
 use Mac::AppleEvents::Simple 1.11 ':all';
 use Mac::Apps::Launch 1.81;
 use Mac::Errors qw(%MacErrors $MacError);
-use Mac::Files 1.08;
+use Mac::Files 1.09;
 use Mac::Memory 1.20 ();
 use Mac::Processes 1.04;
 use Mac::Types;
@@ -31,9 +31,9 @@ use vars qw(
 );
 
 #=============================================================================#
-# $Id: Glue.pm,v 1.21 2004/03/21 05:18:51 pudge Exp $
-($REVISION) 	= ' $Revision: 1.21 $ ' =~ /\$Revision:\s+([^\s]+)/;
-$VERSION	= '1.18';
+# $Id: Glue.pm,v 1.22 2004/03/24 04:40:05 pudge Exp $
+($REVISION) 	= ' $Revision: 1.22 $ ' =~ /\$Revision:\s+([^\s]+)/;
+$VERSION	= '1.19';
 @ISA		= 'Exporter';
 @EXPORT		= ();
 $RESERVED	= 'REPLY|SWITCH|MODE|PRIORITY|TIMEOUT|RETOBJ|ERRORS|CALLBACK|CLBK_ARG';
@@ -597,6 +597,15 @@ EOT
 
 sub _do_obj {
 	my($self, $data, $class, $from) = @_;
+
+	if (ref $data eq 'ARRAY') {
+		my @list;
+		for (@$data) {
+			push @list, _do_obj($self, $_, $class, $from);
+		}
+		return _obj_desc($self, _do_list($self, \@list));
+	}
+
 	my($list, $obj, $form, $dataform, $d, $ref);
 	$class = 'property' if $class =~ /^(?:of|in|prop)$/;
 	confess "Class '$class' does not exist for '$data'.\n"
@@ -2482,4 +2491,4 @@ Interapplication Communication.
 
 =head1 VERSION
 
-v1.18, Wednesday, February 18, 2004
+v1.19, Wednesday, March 23, 2004
