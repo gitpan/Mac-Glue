@@ -244,6 +244,10 @@ sub get_app_status_and_launch
     }
 
     if (!$running) {
+        if (! -e $app_path) {
+            carp("No such file or directory: $app_path");
+            return;
+        }
         unless (-d $app_path && -f $pkginfo) {
             my $RF;
             if ($^O eq 'MacOS') {

@@ -32,9 +32,9 @@ use vars qw(
 );
 
 #=============================================================================#
-# $Id: Glue.pm,v 1.25 2004/12/07 06:22:42 pudge Exp $
-($REVISION) 	= ' $Revision: 1.25 $ ' =~ /\$Revision:\s+([^\s]+)/;
-$VERSION	= '1.22';
+# $Id: Glue.pm,v 1.26 2005/02/20 06:10:17 pudge Exp $
+($REVISION) 	= ' $Revision: 1.26 $ ' =~ /\$Revision:\s+([^\s]+)/;
+$VERSION	= '1.23';
 @ISA		= 'Exporter';
 @EXPORT		= ();
 $RESERVED	= 'REPLY|SWITCH|MODE|PRIORITY|TIMEOUT|RETOBJ|ERRORS|CALLBACK|CLBK_ARG';
@@ -388,7 +388,7 @@ sub _primary {
 				? $hash->{MODE}
 				: exists $self->{MODE}
 					? $self->{MODE}
-					: (kAECanInteract | kAECanSwitchLayer));
+					: kAECanSwitchLayer);
 
 	my $priority =
 		exists $hash->{PRIORITY}
@@ -1340,6 +1340,7 @@ sub _open_others {
 		unless (-e $dir) {
 			warn "Please run gluedialect and gluescriptadds programs"
 				unless $Mac::Glue::CREATINGGLUES;
+			$Mac::Glue::NEEDCREATE = 1;
 			next;
 		}
 
@@ -2228,8 +2229,7 @@ Boolean, for whether or not to wait for a reply.  Default is to wait.
 =item MODE
 
 Set other modes, such as C<kAENeverInteract>.  This value is OR'd
-together with the REPLY value.  Default is C<kAECanInteract |
-kAECanSwitchLayer>.
+together with the REPLY value.  Default is C<kAECanSwitchLayer>.
 
 =item SWITCH
 
@@ -2470,7 +2470,7 @@ Update glueedit
 
 Chris Nandor E<lt>pudge@pobox.comE<gt>, http://pudge.net/
 
-Copyright (c) 1998-2004 Chris Nandor.  All rights reserved.  This program
+Copyright (c) 1998-2005 Chris Nandor.  All rights reserved.  This program
 is free software; you can redistribute it and/or modify it under the same
 terms as Perl itself.
 
@@ -2505,7 +2505,9 @@ Simon Cozens,
 has,
 Bill Birkett,
 Lars Eggert,
-wren argetlahm.
+wren argetlahm,
+Ken Williams,
+Alan Olsen.
 
 (If I left your name out, please remind me.)
 

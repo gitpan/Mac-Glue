@@ -1,3 +1,12 @@
+* v1.23, Saturday, February 19, 2005
+
+   Make default MODE kAECanSwitchLayer instead of kAECanInteract | kAECanSwitchLayer,
+   as this appears to be the default that AppleScript uses.
+
+   Give proper warnings for when files to be glue'd do not exist.  (Kim Helliwell, Ken Williams)
+
+   Make a test fail if scripting additions or dialect were not created.  (Chris Devers)
+
 * v1.22, Monday, December 6, 2004
 
    local()ize $MacPerl::Target in Mac::Glue::Common. (Alan Olsen)
