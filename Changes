@@ -1,3 +1,9 @@
+* v1.22, Monday, December 6, 2004
+
+   local()ize $MacPerl::Target in Mac::Glue::Common. (Alan Olsen)
+
+   Fix bundle targetting under Jaguar. (Ken Williams)
+
 * v1.21, Tuesday, June 8, 2004
 
    Make launching work better for bundles. (wren argetlahm)

@@ -14,6 +14,7 @@ use Mac::AppleEvents::Simple 1.14 ':all';
 use Mac::Apps::Launch 1.90;
 use Mac::Errors qw(%MacErrors $MacError);
 use Mac::Files 1.09;
+use Mac::Gestalt;
 use Mac::Memory 1.20 ();
 use Mac::Processes 1.04;
 use Mac::Types;
@@ -31,9 +32,9 @@ use vars qw(
 );
 
 #=============================================================================#
-# $Id: Glue.pm,v 1.24 2004/06/08 20:07:17 pudge Exp $
-($REVISION) 	= ' $Revision: 1.24 $ ' =~ /\$Revision:\s+([^\s]+)/;
-$VERSION	= '1.21';
+# $Id: Glue.pm,v 1.25 2004/12/07 06:22:42 pudge Exp $
+($REVISION) 	= ' $Revision: 1.25 $ ' =~ /\$Revision:\s+([^\s]+)/;
+$VERSION	= '1.22';
 @ISA		= 'Exporter';
 @EXPORT		= ();
 $RESERVED	= 'REPLY|SWITCH|MODE|PRIORITY|TIMEOUT|RETOBJ|ERRORS|CALLBACK|CLBK_ARG';
@@ -199,7 +200,7 @@ sub ADDRESS {
 			? { typeKernelProcessID() => pack_pid($add[0]) } 
 
 		: $addtype eq 'bundle' || $addtype eq typeApplicationBundleID
-			? { typeApplicationBundleID() => $add[0] } 
+			? { _get_bundle($add[0]) } 
 
 		: $addtype eq 'path'
 			? { typeProcessSerialNumber() => _path_to_psn($add[0]) }
@@ -207,7 +208,7 @@ sub ADDRESS {
 		: { $addtype => $add[0] }
 
 	: $self->{BUNDLE_ID}
-		? { typeApplicationBundleID() => $self->{BUNDLE_ID}  }
+		? { _get_bundle($self->{BUNDLE_ID})  }
 		: { typeApplSignature()       => $self->{CREATOR_ID} };
 
 	# $self->{ID} will only be '????' if we could not identify
@@ -218,6 +219,16 @@ sub ADDRESS {
 	}
 }
 
+# Jaguar can't target bundles natively, so convert to a path
+sub _get_bundle {
+	my($bundle_id) = @_;
+	if ($Gestalt{sysv} >= 4144) {
+		return(typeApplicationBundleID, $bundle_id);
+	} else {
+		my $path = LSFindApplicationForInfo('', $bundle_id);
+		return(typeProcessSerialNumber, _path_to_psn($path));
+	}
+}
 
 #=============================================================================#
 # help UNIVERSAL::can out
@@ -625,7 +636,8 @@ sub _do_obj {
 	$ref = ref $data;
 
 	if ($class eq 'property') {
-		$data = _get_id($self, $data) or croak "Can't find property '$data'.\n";
+		my $prop = $data;
+		$data = _get_id($self, $data) or croak "Can't find property '$prop'.\n";
 		$form = typeProperty;
 
 	} elsif ($ref eq 'AEDesc' || $ref eq 'Mac::AEObjDescType') {

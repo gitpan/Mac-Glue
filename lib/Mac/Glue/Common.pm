@@ -30,16 +30,14 @@ use vars qw(
 );
 
 @EXPORT = qw(glue is_osax is_dialect opts $MACGLUEDIR);
-($REVISION) 	= ' $Revision: 1.3 $ ' =~ /\$Revision:\s+([^\s]+)/;
-$VERSION	= '1.00';
+($REVISION) 	= ' $Revision: 1.5 $ ' =~ /\$Revision:\s+([^\s]+)/;
+$VERSION	= '1.01';
 
 $PROGNAME    ||= basename($0);
 $PROGVERSION ||= $VERSION;
 $PROGDESC    ||= '';
 $PROGOPTS    ||= '';
 $MACGLUEDIR    = $ENV{MACGLUEDIR};
-
-$MacPerl::Target = '' if $^O ne 'MacOS';
 
 if ($^O eq 'MacOS') {
 	$MACGLUEDIR ||= "$ENV{MACPERL}site_perl:Mac:Glue:glues:";
@@ -60,6 +58,8 @@ sub glue {
 	my($opts, $files, $type) = @_;
 	$type ||= 'app';
 	my($delete, %files);
+
+	local $MacPerl::Target = '' if $^O ne 'MacOS';
 
 	my @dirs = $MACGLUEDIR;
 	my $class = 'Mac::AETE::App';
