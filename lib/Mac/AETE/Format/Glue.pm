@@ -217,10 +217,10 @@ sub start_event {
     my($self, $name, $desc, $class, $id, $ev, $en, $c) = @_;
     $ev = lc fixname($name);
     $en = $ev;
-    $c = 2;
-    while (exists($self->{E}{$en})) {
-        $en = $ev . $c++;
-    }
+#     $c = 2;
+#     while (exists($self->{E}{$en})) {
+#         $en = $ev . $c++;
+#     }
     @{$self->{E }{$en}}{qw(class event desc)} = ($class, $id, $desc);
       $self->{DE}{$en}{desc}             = $desc;
     $self->{CE} = $en;
@@ -307,10 +307,10 @@ sub end_enumeration {
 sub write_enum {
     my($self, $name, $id, $desc, $ev, $en, $c) = @_;
     $en = $ev = lc fixname($name);
-    $c = 2;
-    while (exists $self->{N}{$en}) {
-        $en = $ev . $c++;
-    }
+#     $c = 2;
+#     while (exists $self->{N}{$en}) {
+#         $en = $ev . $c++;
+#     }
 
     $self->{N }{$self->{'NE'}}{$en}{id}   = $id;
     $self->{N }{$self->{'NE'}}{$en}{desc} = $desc;

@@ -1,6 +1,4 @@
------BEGIN PGP SIGNED MESSAGE-----
-
-Wednesday, September 1, 1999
+Friday, September 10, 1999
 
 THIS IS BETA CODE.  BUT NOT FOR LONG.
 
@@ -9,16 +7,16 @@ assembly is required.
 
 
 WHAT THIS IS
-- ------------
+------------
 
-Mac::Glue 0.51.
+Mac::Glue 0.56.
 It is an architecture for using Apple event terminology in MacPerl.
 It is cool.
 It is in beta.  Yay!
 
 
 GETTING STARTED
-- ---------------
+---------------
 
 You need the latest cpan-mac installed.  It is cpan-mac 0.35,
 and available at:
@@ -31,6 +29,11 @@ some other really cool stuff).
 
 Make sure in your Preferences, set site_perl as a libraries
 path (so it will come before your main MacPerl lib directory).
+
+NOTE: This distribution contains Mac::Processes 1.01, for launching apps
+by their path and getting the right Process Serial Number. The module
+will be included in a future cpan-mac distribution, and then a future
+MacPerl distribution.
 
 Drop the Mac-Glue archive, or the unpacked folder, on the
 installme droplet that came with cpan-mac.
@@ -48,7 +51,7 @@ want to try, run the applications through the droplet first.
 
 
 PLAYING
-- -------
+-------
 
 Read the history in Mac:Glue.pm for what's changed, and read the code
 for the examples in ex/.
@@ -57,17 +60,7 @@ Please play and read the notes and feed back to macperl-modules (see
 http://www.macperl.org/ for more details).  Feel free to send any
 feedback, including patches, to the list.
 
-- -- 
+-- 
 Chris Nandor          mailto:pudge@pobox.com         http://pudge.net/
 %PGPKey = ('B76E72AD', [1024, '0824090B CE73CA10  1FF77F13 8180B6B6'])
 
------BEGIN PGP SIGNATURE-----
-Version: PGPfreeware 6.0.2i for non-commercial use
-Comment: Bwahahahaha!
-
-iQCVAwUBN82t9ChcZja3bnKtAQHl1QQAi1SYfKB/aDWIx8ByCodfnBR1FjkwDv+S
-MYuoZ9cA9EbZsEZfA7kylHgI5gdm/HzfiE1O/dCAHdgHKnV+vj/Xnp5tCDoHCX5d
-lge9o2o/lf3ULZonqFbyeRbaB9R1fIoFNUCrVuu3lip0lstRjVcog6vbGVdmy7l/
-AOOn8DgLKz8=
-=ixHm
------END PGP SIGNATURE-----

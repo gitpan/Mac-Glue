@@ -18,9 +18,9 @@ die $^E if $^E;
 $finder->open($finder->obj(file => $file));
 die $^E if $^E;
 
-my @fields = $fm->get( $fm->prop(name => fields => gAll, database => 1));
+my @fields = $fm->get( $fm->prop(name => fields => database => 1));
 
-my @data = $fm->get( $fm->obj(records => gAll, database => 1));
+my @data = $fm->get( $fm->obj(records => database => 1));
 if (! ref $data[0]) {
     @data = [@data];
 }

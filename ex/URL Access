@@ -5,14 +5,14 @@ use Mac::Files;
 use Mac::InternetConfig;
 
 my $file = FindFolder(kOnSystemDisk, kDesktopFolderType)
-    . ":Mac-Glue-docs.html";
+    . ":Mac-Glue.html";
 die "'$file' already exists.\n" if -e $file;
 my $map  = $InternetConfigMap{$file};
 
-my $url = new Mac::Glue 'URL_Access_Scripting';
+my $url = new Mac::Glue 'URL Access Scripting';
 $url->activate;
 $url->download(
-    'http://pudge.net/macperl/Mac-Glue-docs.html',
+    'http://pudge.net/macperl/Mac-Glue.html',
     to => $file, progress => 1
 );
 $url->quit;
