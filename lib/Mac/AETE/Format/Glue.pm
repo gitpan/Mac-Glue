@@ -171,6 +171,7 @@ sub finish {
     $dbm{COMPARISON}    = $self->{P};
     $dbm{ID}            = $self->{_parser}{ID};
     $dbm{APPNAME}       = $self->{_parser}{APPNAME};
+    $dbm{VERSION}       = $self->{_parser}{VERSION};
 
     MacPerl::SetFileInfo('McPL', $TYPE, $self->{OUTPUT}) if $^O eq 'MacOS';
     return 1 if $nopod;

@@ -139,7 +139,8 @@ sub new {
     $self->{APPNAME} = $pname;
 
     if ($running) {
-        unless ($aete_handle = get_aete_via_event($target, $sign)) {
+        ($aete_handle, $self->{VERSION}) = get_aete_via_event($target, $sign);
+        unless ($aete_handle) {
             carp("The application is not scriptable");
             return;
         }
@@ -178,7 +179,10 @@ sub get_app_status_and_launch
     my ($psn, $psi, $sign);
 
     $running = 0;
-    
+
+#    fileparse_set_fstype("MacOS");
+    ($name,$path,$suffix) = fileparse($app_path, "");
+
     # test for package, works under Mac OS X/Classic too
     my $pkginfo = catfile($app_path, 'Contents', 'PkgInfo');
     if (-d $app_path && -f $pkginfo) {
@@ -186,22 +190,22 @@ sub get_app_status_and_launch
         open $fh, "<" . $pkginfo or croak "Can't open $pkginfo: $!";
         (my($type), $sign) = (<$fh> =~ /^(.{4})(.{4})$/);
         for $psn (keys %Process) {
-            $pname = $Process{$psn}->processName;
+            my $psi = $Process{$psn};
+            $pname = $psi->processName;
             if ($sign eq '????') {
 	        $running = 1, $name = $pname, last
-                    if $Process{$psn}->processAppSpec =~ /^\Q$app_path/;
+                    if $psi->processAppSpec =~ /^\Q$app_path/;
             } else {
 	        $running = 1, $name = $pname, last
-                    if $sign eq $Process{$psn}->processSignature;
+                    if $sign eq $psi->processSignature;
        	    }
         }
         $ok_to_launch = !$running;
 
     } else {
-#        fileparse_set_fstype("MacOS");
-        ($name,$path,$suffix) = fileparse($app_path, "");
         for $psn (keys %Process) {
-            $pname = $Process{$psn}->processName;
+            my $psi = $Process{$psn};
+            $pname = $psi->processName;
 #            print "$pname", "   $name\n";
             $running = 1, last if $pname eq $name;
         }
@@ -239,8 +243,10 @@ sub get_app_status_and_launch
         }
     }
 
-    while (($psn, $psi) = each(%Process)) {
-        if (defined $sign) {
+    for my $psn (keys %Process) {
+        my $psi = $Process{$psn};
+        $pname = $psi->processName;
+        if (defined $sign && length($sign) && $sign ne '????') {
             $running = 1, $name = $psi->processName,
                 last if $sign eq $psi->processSignature;
         } else {
@@ -262,7 +268,8 @@ sub get_aete_via_event
 
     my @add;
     if ($sign eq '????') {
-        while (my($psn, $psi) = each %Process) {
+        for my $psn (keys %Process) {
+            my $psi = $Process{$psn};
             if ($psi->processAppSpec =~ /^\Q$target/) {
                 push @add, typeProcessSerialNumber, pack_psn($psn);
                 last;
@@ -303,7 +310,34 @@ sub get_aete_via_event
         return;
     }
     AEDisposeDesc $event;
-    \@handles;
+
+    my $vers;
+    $event = AEBuildAppleEvent('core', 'getd', @add[0, 1], kAutoGenerateReturnID, kAnyTransactionID,
+        "'----':obj {want:type(prop), form:prop, seld:type(vers), from:'null'()}");
+    $reply = AESend($event, kAEWaitReply);
+    if ($reply) {
+#        print AEPrint($reply), "\n";
+        my($result_desc, $type);
+        if ($result_desc = AEGetParamDesc($reply, keyDirectObject)) {
+            $vers = $result_desc->get;
+            if ($result_desc->type eq 'vers') {
+                my @l = split(//, unpack("a7", $vers));
+                $vers = unpack("x7a@{[ord($l[6])]}", $vers);
+            } elsif ($result_desc->type eq 'utxt') {
+            	my $char = AECoerceDesc($result_desc, typeChar);
+            	$vers = $char->get;
+            }
+        }
+
+        if ($result_desc) {
+            AEDisposeDesc $result_desc;
+        }
+
+        AEDisposeDesc $reply;
+    }
+    AEDisposeDesc $event;
+
+    (\@handles, $vers);
 }
 
 1;

@@ -1,3 +1,25 @@
+* v1.13, September 2, 2003
+
+   Removed Memoize.  The speed gains were exceptionally modest, and some
+   bugs popped up resulting from adding it.  It could be added back at
+   some point, but it would need to be done more carefully, and right
+   now the benefits don't justify the cost in time to get it done properly.
+
+   Cleanup/bug fixes for Mac::AETE::App in finding/opening applications
+   and fetching the application names.
+
+   Added a VERSION key to the glues (the version of the application),
+   and a version() method.
+
+   Added -c flag to gluemac to check to see if application version matches
+   the versions stored in the installed glues ($glue->version eq
+   $glue->{VERSION}).
+
+   Added -r flag to gluemac to re-create installed application glues
+   (with -c, only re-creates those with differing versions).  It's
+   recommended that users run gluemac -r to update glues with new
+   VERSION key and fixed APPNAME key.
+
 * v1.12, August 27, 2003
 
    Added Memoize to speed up some methods and functions.

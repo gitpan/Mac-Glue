@@ -25,16 +25,18 @@ use Mac::AETE::Format::Glue;
 
 use base 'Exporter';
 use vars qw(
-	@EXPORT $REVISION $VERSION
-	$PROGNAME $PROGVERSION $PROGDESC $MACGLUEDIR
+	@EXPORT $REVISION $VERSION $MACGLUEDIR
+	$PROGNAME $PROGVERSION $PROGDESC $PROGOPTS
 );
 
 @EXPORT = qw(glue is_osax is_dialect opts $MACGLUEDIR);
-($REVISION) 	= ' $Revision: 1.2 $ ' =~ /\$Revision:\s+([^\s]+)/;
+($REVISION) 	= ' $Revision: 1.3 $ ' =~ /\$Revision:\s+([^\s]+)/;
 $VERSION	= '1.00';
 
 $PROGNAME    ||= basename($0);
 $PROGVERSION ||= $VERSION;
+$PROGDESC    ||= '';
+$PROGOPTS    ||= '';
 $MACGLUEDIR    = $ENV{MACGLUEDIR};
 
 $MacPerl::Target = '' if $^O ne 'MacOS';
@@ -131,7 +133,10 @@ sub glue {
 		$aete->read;
 		$aete->write;
 		$conv->finish;
-		print "Created and installed \u$type glue for $file ($fixed)\n";
+
+		my $name = $file;
+		$name .= ", v$aete->{VERSION}" if $aete->{VERSION};
+		print "Created and installed \u$type glue for $name ($fixed)\n";
 	}
 }
 
@@ -166,7 +171,8 @@ sub is_dialect {
 
 sub opts {
 	my %opts;
-	usage('Options used incorrectly') unless getopts('hvI', \%opts);
+	my $opts = $PROGOPTS . 'hvI';
+	usage('Options used incorrectly') unless getopts($opts, \%opts);
 	usage() if $opts{'h'};
 	version() if $opts{'v'};
 	return \%opts;

@@ -18,7 +18,6 @@ use Mac::Memory 1.20 ();
 use Mac::Path::Util 0.09;
 use Mac::Processes 1.04;
 use Mac::Types;
-use Memoize;
 use MLDBM ('DB_File', $Mac::Glue::Common::SERIALIZER);
 
 use strict;
@@ -28,13 +27,13 @@ use vars qw(
 	$GENPKG $GENSEQ %OPENGLUES $MERGEDCLASSES $OTHEREVENT
 	$OTHERCLASS %SPECIALEVENT %SPECIALCLASS %DESCS
 	$MERGEDENUM $OTHERENUM %INSL %DESC_TYPE %COMP %LOGI
-	$RESERVED $MEMOIZE
+	$RESERVED
 );
 
 #=============================================================================#
-# $Id: Glue.pm,v 1.14 2003/08/28 02:58:35 pudge Exp $
-($REVISION) 	= ' $Revision: 1.14 $ ' =~ /\$Revision:\s+([^\s]+)/;
-$VERSION	= '1.12';
+# $Id: Glue.pm,v 1.15 2003/09/02 07:35:41 pudge Exp $
+($REVISION) 	= ' $Revision: 1.15 $ ' =~ /\$Revision:\s+([^\s]+)/;
+$VERSION	= '1.13';
 @ISA		= 'Exporter';
 @EXPORT		= ();
 $RESERVED	= 'REPLY|SWITCH|MODE|PRIORITY|TIMEOUT|RETOBJ|ERRORS|CALLBACK|CLBK_ARG';
@@ -45,7 +44,7 @@ $RESERVED	= 'REPLY|SWITCH|MODE|PRIORITY|TIMEOUT|RETOBJ|ERRORS|CALLBACK|CLBK_ARG'
 			gTrue     gFalse     gNext    gPrevious
 			gFirst    gMiddle    gLast    gAny    gAll
 		);
-@METHS		= qw(	ADDRESS AUTOLOAD can launch obj prop	);
+@METHS		= qw(	ADDRESS AUTOLOAD can launch obj prop version	);
 
 @EXPORT_OK	= ( @Mac::AppleEvents::EXPORT, '$MacError', @SYMS );
 %EXPORT_TAGS	= (
@@ -57,7 +56,6 @@ $RESERVED	= 'REPLY|SWITCH|MODE|PRIORITY|TIMEOUT|RETOBJ|ERRORS|CALLBACK|CLBK_ARG'
 
 $GENPKG		= __PACKAGE__;
 $GENSEQ		= 0;
-$MEMOIZE	= 1 if !defined $MEMOIZE;
 
 #=============================================================================#
 # exported functions
@@ -67,17 +65,6 @@ sub enum ($)		{ bless [@_], 'Mac::AEEnum' }
 sub whose		{ bless [formTest, @_], 'Mac::AEObjDescType' }
 sub range ($$)		{ bless [formRange, @_], 'Mac::AEObjDescType' }
 sub location ($;$);	*location = *_do_loc{CODE};
-
-# this should be safe ... one never knows, though!
-# it will treat the passed object as a string, which is OK, as it will
-# just end up being tied to the object, which is what we want
-# to disable this, do BEGIN { $Mac::Glue::MEMOIZE = 0 } in your code, before
-# loading Mac::Glue
-if ($MEMOIZE) {
-	for (qw(obj prop _do_obj _do_loc _obj_desc obj_form param_type enum whose range location)) {
-		memoize($_, LIST_CACHE => 'MERGE');
-	}
-}
 
 #=============================================================================#
 # constants
@@ -170,7 +157,14 @@ sub new {
 		}
 	}
 
-	$self = { _DB => $db, ID => $db->{ID}, SWITCH => 0, GLUENAME => $app, APPNAME => $db->{APPNAME} };
+	$self = {
+		_DB		=> $db,
+		ID		=> $db->{ID},
+		GLUENAME	=> $app,
+		APPNAME		=> $db->{APPNAME},
+		VERSION		=> $db->{VERSION},
+		SWITCH		=> 0,
+	};
 
 	ADDRESS($self, $addtype, @add);
 
@@ -1177,6 +1171,26 @@ sub obj {
 }
 
 #=============================================================================#
+# get app version
+
+sub version {
+	my($self) = @_;
+
+	my $reply = $self->prop('version')->get(RETOBJ => 1);
+	my $vers;
+
+	if ($reply->type eq 'vers') {
+		my $data = $reply->get;
+		my @l = split(//, unpack("a7", $data));
+		$vers = unpack("x7a@{[ord($l[6])]}", $data);
+	} else {
+		$vers = $reply->get;
+	}
+
+	return $vers;
+}
+
+#=============================================================================#
 # launch the app (done automatically when an event is called if not running)
 
 sub launch {
@@ -2129,6 +2143,17 @@ Nothing is exported by default.
 (This won't work on Mac OS X for now.)
 
 
+=head2 Updating Glues
+
+Use the -c and -r flags in F<gluemac> to update glues, either updating all
+(with -r) glues, or just those apps with versions different from those stored
+in the glues.
+
+To update scripting additions or the dialect (which probably should be done
+when adding new scripting additions, or updating the system software),
+run F<gluescriptadds> and F<gluedialect>.
+
+
 =head2 Scripting Addition Maintenance
 
 If you have a lot of scripting additions, it can slow down Mac::Glue
@@ -2197,11 +2222,6 @@ Add comparison operators from glues ?
 
 New AETE flags in Mac OS 8.5, Mac OS 9?  Anything else new?  Anything
 missing in backward compatibility to 7.5?
-
-=item *
-
-System of versioning (for glues and target apps) for distribution
-of modified glues
 
 =item *
 
@@ -2300,4 +2320,4 @@ Interapplication Communication.
 
 =head1 VERSION
 
-v1.12, Wednesday, August 27, 2003
+v1.13, Tuesday, September 2, 2003

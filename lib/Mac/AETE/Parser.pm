@@ -115,6 +115,7 @@ sub new {
     $self->{_suite_list} = ();
     $self->{ID}          = $data->{ID};
     $self->{APPNAME}     = $data->{APPNAME};
+    $self->{VERSION}     = $data->{VERSION};
 
     return $self;
 }
