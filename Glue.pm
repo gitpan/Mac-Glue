@@ -31,9 +31,9 @@ use vars qw(
 );
 
 #=============================================================================#
-# $Id: Glue.pm,v 1.20 2004/02/18 07:59:04 pudge Exp $
-($REVISION) 	= ' $Revision: 1.20 $ ' =~ /\$Revision:\s+([^\s]+)/;
-$VERSION	= '1.17';
+# $Id: Glue.pm,v 1.21 2004/03/21 05:18:51 pudge Exp $
+($REVISION) 	= ' $Revision: 1.21 $ ' =~ /\$Revision:\s+([^\s]+)/;
+$VERSION	= '1.18';
 @ISA		= 'Exporter';
 @EXPORT		= ();
 $RESERVED	= 'REPLY|SWITCH|MODE|PRIORITY|TIMEOUT|RETOBJ|ERRORS|CALLBACK|CLBK_ARG';
@@ -2438,34 +2438,34 @@ terms as Perl itself.
 
 =head1 THANKS
 
-Matthias Neeracher E<lt>neeracher@mac.comE<gt>,
-David Schooley E<lt>dcschooley@mediaone.netE<gt>,
-Graham Barr E<lt>gbarr@pobox.comE<gt>,
-John W Baxter E<lt>jwblist@olympus.netE<gt>,
-Marion Delgado E<lt>dhp@efn.orgE<gt>,
-Eric Dobbs E<lt>dobbs@visionlink.orgE<gt>,
-Josh Gemmell E<lt>joshg@ola.bc.caE<gt>,
-Alex Harper E<lt>harper@misanthrope.netE<gt>,
-Nathaniel Irons E<lt>irons@espresso.hampshire.eduE<gt>,
-Dave Johnson E<lt>dave_johnson@ieee.orgE<gt>,
-Bart Lateur E<lt>bart.mediamind@ping.beE<gt>,
-Andy Lester E<lt>andy@petdance.comE<gt>,
-Jefferson R. Lowrey E<lt>lowrey@mailbag.comE<gt>,
-Mat Marcus E<lt>mmarcus@adobe.comE<gt>,
-Larry Moore E<lt>ljmoore@freespace.netE<gt>,
-Ricardo Muggli E<lt>rtmuggli@carlsoncraft.comE<gt>,
-Vincent Nonnenmacher E<lt>dpi@pobox.oleane.comE<gt>,
-Henry Penninkilampi E<lt>htp@metropolis.net.auE<gt>,
-Peter Prymmer E<lt>pvhp@best.comE<gt>,
-Ramesh R. E<lt>sram0mp@radon.comm.mot.comE<gt>,
-Axel Rose E<lt>rose@sj.comE<gt>,
-Stephan Somogyi E<lt>somogyi@gyroscope.netE<gt>,
-Kevin Walker E<lt>kwalker@xmission.comE<gt>,
-Matthew Wickline E<lt>mattheww@wickline.orgE<gt>,
-Simon Cozens E<lt>simon@simon-cozens.orgE<gt>,
-has E<lt>hamish.sanderson@virgin.netE<gt>,
-Bill Birkett E<lt>wbirkett@pcolor.comE<gt>,
-Lars Eggert E<lt>lars.eggert@netlab.nec.deE<gt>.
+Matthias Neeracher,
+David Schooley,
+Graham Barr,
+John W Baxter,
+Marion Delgado,
+Eric Dobbs,
+Josh Gemmell,
+Alex Harper,
+Nathaniel Irons,
+Dave Johnson,
+Bart Lateur,
+Andy Lester,
+Jefferson R. Lowrey,
+Mat Marcus,
+Larry Moore,
+Ricardo Muggli,
+Vincent Nonnenmacher,
+Henry Penninkilampi,
+Peter Prymmer,
+Ramesh R.,
+Axel Rose,
+Stephan Somogyi,
+Kevin Walker,
+Matthew Wickline,
+Simon Cozens,
+has,
+Bill Birkett,
+Lars Eggert.
 
 (If I left your name out, please remind me.)
 
@@ -2482,4 +2482,4 @@ Interapplication Communication.
 
 =head1 VERSION
 
-v1.17, Wednesday, February 18, 2004
+v1.18, Wednesday, February 18, 2004
