@@ -4,7 +4,7 @@ package Mac::Glue;
 # venturing within.  it might seem reasonable at first, but then you
 # get sucked in and it's all over.
 
-use Mac::Glue::Common ();
+use Mac::Glue::Common qw($MACGLUEDIR);
 use Carp;
 use Exporter;
 use Fcntl;
@@ -18,6 +18,7 @@ use Mac::Memory 1.20 ();
 use Mac::Path::Util 0.09;
 use Mac::Processes 1.04;
 use Mac::Types;
+use Memoize;
 use MLDBM ('DB_File', $Mac::Glue::Common::SERIALIZER);
 
 use strict;
@@ -27,13 +28,13 @@ use vars qw(
 	$GENPKG $GENSEQ %OPENGLUES $MERGEDCLASSES $OTHEREVENT
 	$OTHERCLASS %SPECIALEVENT %SPECIALCLASS %DESCS
 	$MERGEDENUM $OTHERENUM %INSL %DESC_TYPE %COMP %LOGI
-	$RESERVED
+	$RESERVED $MEMOIZE
 );
 
 #=============================================================================#
-# $Id: Glue.pm,v 1.13 2003/05/23 03:03:58 pudge Exp $
-($REVISION) 	= ' $Revision: 1.13 $ ' =~ /\$Revision:\s+([^\s]+)/;
-$VERSION	= '1.11';
+# $Id: Glue.pm,v 1.14 2003/08/28 02:58:35 pudge Exp $
+($REVISION) 	= ' $Revision: 1.14 $ ' =~ /\$Revision:\s+([^\s]+)/;
+$VERSION	= '1.12';
 @ISA		= 'Exporter';
 @EXPORT		= ();
 $RESERVED	= 'REPLY|SWITCH|MODE|PRIORITY|TIMEOUT|RETOBJ|ERRORS|CALLBACK|CLBK_ARG';
@@ -56,6 +57,7 @@ $RESERVED	= 'REPLY|SWITCH|MODE|PRIORITY|TIMEOUT|RETOBJ|ERRORS|CALLBACK|CLBK_ARG'
 
 $GENPKG		= __PACKAGE__;
 $GENSEQ		= 0;
+$MEMOIZE	= 1 if !defined $MEMOIZE;
 
 #=============================================================================#
 # exported functions
@@ -65,6 +67,17 @@ sub enum ($)		{ bless [@_], 'Mac::AEEnum' }
 sub whose		{ bless [formTest, @_], 'Mac::AEObjDescType' }
 sub range ($$)		{ bless [formRange, @_], 'Mac::AEObjDescType' }
 sub location ($;$);	*location = *_do_loc{CODE};
+
+# this should be safe ... one never knows, though!
+# it will treat the passed object as a string, which is OK, as it will
+# just end up being tied to the object, which is what we want
+# to disable this, do BEGIN { $Mac::Glue::MEMOIZE = 0 } in your code, before
+# loading Mac::Glue
+if ($MEMOIZE) {
+	for (qw(obj prop _do_obj _do_loc _obj_desc obj_form param_type enum whose range location)) {
+		memoize($_, LIST_CACHE => 'MERGE');
+	}
+}
 
 #=============================================================================#
 # constants
@@ -132,13 +145,13 @@ sub new {
 	# find glue, try a few different names just in case
 	($app1 = $app) =~ tr/ /_/;
 	($app2 = $app) =~ tr/_/ /;
-	for (map { catfile($ENV{MACGLUEDIR}, $_) } $app, $app1, $app2) {
+	for (map { catfile($MACGLUEDIR, $_) } $app, $app1, $app2) {
 		if (-e) {
 			$glue = $_;
 			last;
 		}
 	}
-	croak "No application glue for '$app' found in '$ENV{MACGLUEDIR}'" unless $glue;
+	croak "No application glue for '$app' found in '$MACGLUEDIR'" unless $glue;
 
 	# if not already opened, open and store reference to db
 	unless (exists $OPENGLUES{$glue}) {
@@ -1200,7 +1213,7 @@ sub _path_to_psn {
 sub _open_others {
 	chomp(my $curdir = `pwd`);
 	my @others;
-	for my $dir (map { catfile($ENV{MACGLUEDIR}, $_) } qw[dialects additions]) {
+	for my $dir (map { catfile($MACGLUEDIR, $_) } qw[dialects additions]) {
 		unless (-e $dir) {
 			warn "Please run gluedialect and gluescriptadds programs"
 				unless $Mac::Glue::CREATINGGLUES;
@@ -1227,7 +1240,7 @@ sub _open_others {
 	chdir $curdir or confess "Can't chdir to '$curdir': $!";
 
 # would this even help anything?  BAH!
-# 	tie my %merged, 'MLDBM', catfile($ENV{MACGLUEDIR}, "gluemergecache"), O_RDWR or confess "Can't tie '$_': $!";
+# 	tie my %merged, 'MLDBM', catfile($MACGLUEDIR, "gluemergecache"), O_RDWR or confess "Can't tie '$_': $!";
 # 	if ($merged{EVENT} ne "@$OTHEREVENT" || $merged{CLASS} ne "@$OTHERCLASS" || $merged{ENUM} ne "@$OTHERENUM") {
 # 		$MERGEDCLASSES	= $merged{CLASSES} = {};
 # 		$MERGEDENUM	= $merged{ENUM} = {};
@@ -2287,4 +2300,4 @@ Interapplication Communication.
 
 =head1 VERSION
 
-v1.11, Thursday, May 22, 2003
+v1.12, Wednesday, August 27, 2003

@@ -25,9 +25,9 @@ use warnings;
 use File::Basename;
 use File::Spec::Functions;
 use Getopt::Std;
-use Mac::Glue::Common ();
+use Mac::Glue::Common qw($MACGLUEDIR);
 
-(my $VERSION) = ' $Revision: 1.2 $ ' =~ /\$Revision:\s+([^\s]+)/;
+(my $VERSION) = ' $Revision: 1.3 $ ' =~ /\$Revision:\s+([^\s]+)/;
 my $PROGNAME = basename($0);
 
 my %opts;
@@ -48,7 +48,7 @@ push @dirs, 'dialects'  if $opts{'d'} || $opts{'L'};
 
 my %list;
 OUTER: for my $dir (@dirs) {
-	my $d = catfile($ENV{MACGLUEDIR}, $dir);
+	my $d = catfile($MACGLUEDIR, $dir);
 	opendir my $dh, $d or die $!;
 	for my $f (readdir $dh) {
 		if ($opts{'L'} && $f =~ /\.pod$/) {

@@ -1,6 +1,22 @@
+* v1.12, August 27, 2003
+
+   Added Memoize to speed up some methods and functions.
+
+   Changed $ENV{MACGLUEDIR} to $MACGLUEDIR.  $ENV{MACGLUEDIR} will still
+   initialize $MACGLUEDIR, but in some cases, %ENV gets wiped, so we don't
+   want to rely on it.  (Lloyd Butler)
+
+   Even if you get a reply back in Mac::AETE::App, that doesn't mean the
+   data is good, so do a check on it and give a better error message.
+   (Ian Cabell)
+
+   Cleaned up ex/address_book.
+
+   Added ex/itunes.
+
 * v1.11, May 22, 2003
 
-   Add super-cool feature for calling event methods on object
+   Added super-cool feature for calling event methods on object
    specifier record objects (like $track->play).  See
    "Shortcuts for object specifier records" in the docs for
    more information.
@@ -12,7 +28,7 @@
    and no note means it is read-only, in your old docs.  Or change them
    all by hand.
 
-   Fix minor paths bug in call to Mac::Path::Util.  Require
+   Fixed minor paths bug in call to Mac::Path::Util.  Require
    more recent version of said module.
 
    Added t/pod.t.

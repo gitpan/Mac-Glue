@@ -26,36 +26,40 @@ use Mac::AETE::Format::Glue;
 use base 'Exporter';
 use vars qw(
 	@EXPORT $REVISION $VERSION
-	$PROGNAME $PROGVERSION $PROGDESC
+	$PROGNAME $PROGVERSION $PROGDESC $MACGLUEDIR
 );
 
-@EXPORT = qw(glue is_osax is_dialect opts);
-($REVISION) 	= ' $Revision: 1.1 $ ' =~ /\$Revision:\s+([^\s]+)/;
+@EXPORT = qw(glue is_osax is_dialect opts $MACGLUEDIR);
+($REVISION) 	= ' $Revision: 1.2 $ ' =~ /\$Revision:\s+([^\s]+)/;
 $VERSION	= '1.00';
 
 $PROGNAME    ||= basename($0);
 $PROGVERSION ||= $VERSION;
+$MACGLUEDIR    = $ENV{MACGLUEDIR};
 
 $MacPerl::Target = '' if $^O ne 'MacOS';
 
 if ($^O eq 'MacOS') {
-	$ENV{MACGLUEDIR} ||= "$ENV{MACPERL}site_perl:Mac:Glue:glues:";
-	$ENV{MACGLUEDIR}  .= ':' unless $ENV{MACGLUEDIR} =~ /:$/;
-} elsif (!$ENV{MACGLUEDIR}) {
+	$MACGLUEDIR ||= "$ENV{MACPERL}site_perl:Mac:Glue:glues:";
+	$MACGLUEDIR  .= ':' unless $MACGLUEDIR =~ /:$/;
+} elsif (!$MACGLUEDIR) {
 	my $dir = dirname $INC{'Mac/Glue/Common.pm'};
 	unless (file_name_is_absolute($dir)) {
 		require Cwd;
 		$dir = catdir(Cwd::cwd(), $dir);
 	}
-	$ENV{MACGLUEDIR} = catdir($dir, 'glues');
+	$MACGLUEDIR = catdir($dir, 'glues');
 }
+
+# in case old code uses it ...
+$ENV{MACGLUEDIR} = $MACGLUEDIR;
 
 sub glue {
 	my($opts, $files, $type) = @_;
 	$type ||= 'app';
 	my($delete, %files);
 
-	my @dirs = $ENV{MACGLUEDIR};
+	my @dirs = $MACGLUEDIR;
 	my $class = 'Mac::AETE::App';
 	if ($type eq 'dialect') {
 		push @dirs, 'dialects';

@@ -277,31 +277,33 @@ sub get_aete_via_event
     my $reply = AESend($event, kAEWaitReply);
     my @handles;
     if ($reply) {
-        my $result_desc = AEGetParamDesc($reply, keyDirectObject);
+        my $result_desc = AEGetParamDesc($reply, keyDirectObject)
+            or warn("Cannot get AETE: $MacError") and return;
         if ($result_desc->type eq typeAEList) {
             for (my $i = 1; $i <= AECountItems($result_desc); $i++) {
                 my $tmp_desc = AEGetNthDesc($result_desc, $i)
-                    or carp("Bad result from GetAETE!\n") and return;
+                    or warn("Bad result from GetAETE!") and return;
                 my $aete_handle = $tmp_desc->data
-                    or carp("Bad result from GetAETE!\n") and return;
+                    or warn("Bad result from GetAETE!") and return;
                 my $aete = new Handle($aete_handle->get)
-                    or carp("Bad result from GetAETE!\n") and return;
+                    or warn("Bad result from GetAETE!") and return;
                 push @handles, $aete;
             }
        } else {
             my $aete_handle = $result_desc->data
-                or carp("Bad result from GetAETE!\n") and return;
+                or warn("Bad result from GetAETE!") and return;
             my $aete = new Handle($aete_handle->get)
-                or carp("Bad result from GetAETE!\n") and return;
+                or warn("Bad result from GetAETE!") and return;
             push @handles, $aete;
         }
         AEDisposeDesc $result_desc;
         AEDisposeDesc $reply;
     } else {
-        carp("Cannot get AETE: $MacError\n");
+        warn("Cannot get AETE: $MacError");
         return;
     }
     AEDisposeDesc $event;
     \@handles;
 }
 
+1;
