@@ -35,7 +35,7 @@ use vars qw(
 
 #=============================================================================#
 
-$VERSION            = '0.56';
+$VERSION            = '0.57';
 @ISA                = 'Exporter';
 @EXPORT             = ();
 @SYMS               = qw(
@@ -102,10 +102,13 @@ sub new {
     $self = { _DB => $db, ID => $db->{ID}, SWITCH => 0, GLUENAME => $app };
 
     $self->{ADDRESS} = defined $addtype
-            ? $addtype eq 'ppc' || $addtype eq typeTargetID
+            ? $addtype eq 'ppc'  || $addtype eq typeTargetID
                 ? { typeTargetID()            => pack_ppc($db->{ID}, @add) }
 
-            : $addtype eq 'psn' || $addtype eq typeProcessSerialNumber
+            : $addtype eq 'eppc' || $addtype eq typeTargetID
+                ? { typeTargetID()            => pack_eppc($db->{ID}, @add) }
+
+            : $addtype eq 'psn'  || $addtype eq typeProcessSerialNumber
                 ? { typeProcessSerialNumber() => pack_psn($add[0]) } 
 
             : $addtype eq 'path'
@@ -113,9 +116,9 @@ sub new {
 
             : { $addtype => $add[0] }
 
-        : $self->{ID};
+        : { typeApplSignature() => $self->{ID} };
 
-    @{$self}{qw(CLASS NAMES)} = _merge_classes($db);
+    @{$self}{qw(CLASS NAMES IDS)} = _merge_classes($db);
     _merge_enums($db, $self);
 
     bless($self, $class);
@@ -126,11 +129,11 @@ sub new {
 
 sub can {
     my($self, $meth) = @_;
-    UNIVERSAL::can() unless @_ == 2;
+    return unless @_ == 2;
     my $can = UNIVERSAL::can($self, $meth);
     unless ($can) {
         $AUTOLOAD = ref($self) . "::$meth";
-        $can = AUTOLOAD(1, $self);
+        $can = AUTOLOAD('AUTOLOAD::can', $self);
     }
     return $can;
 }
@@ -139,7 +142,7 @@ sub can {
 # define event calls as subs
 
 sub AUTOLOAD {
-    my $can = $_[0] == 1 ? shift : 0;
+    my $can = $_[0] eq 'AUTOLOAD::can' ? shift : 0;
     my $self = $_[0];
     (my $name = $AUTOLOAD) =~ s/^.*://;
     my $sub;
@@ -163,17 +166,14 @@ sub AUTOLOAD {
         }
     }
 
-    # create new sub, only do AUTOLOAD for it once!
+    # install new sub, only do AUTOLOAD for it once!
     if ($sub) {
         no strict 'refs';
         *{$AUTOLOAD} = $sub;
     }
 
-    if ($can) {
-        return $sub ? $sub : undef;
-    } else {
-        goto &$AUTOLOAD;
-    }
+    return $sub if $can;
+    goto &$sub;
 }
 
 #=============================================================================#
@@ -196,15 +196,22 @@ sub login {
 
 sub _primary {
     my($self, $e, @args) = @_;
-    my($evt, $rep);
+    my($evt, $rep, %xargs, $dobj);
 
     my($class, $event, $reply, $params) = @{$e}{qw(class event reply params)};
 
+    $dobj = shift @args if @args % 2;
+
+    %xargs = @args;
+    for (keys %xargs) {
+        delete $xargs{$_} unless /^(?:CALLBACK|CLBK_ARG)$/;
+    }
+    @xargs{keys %{$self->{ADDRESS}}} = values %{$self->{ADDRESS}};
+
     # create event (Mac::AppleEvents::Simple object)
-    $evt = build_event($class, $event, $self->{ADDRESS});
+    $evt = build_event($class, $event, \%xargs);
 
     # prepare parameters (direct object)
-    my $dobj = shift @args if @args % 2;
     if (defined $dobj) {
         croak "Direct object parameter not present"
             unless exists $params->{keyDirectObject()};
@@ -215,7 +222,7 @@ sub _primary {
     my $hash = {@args};
     if ($hash) {
         for my $p (keys %$hash) {
-            next if $p =~ /^(?:REPLY|SWITCH|MODE|PRIORITY|TIMEOUT|RETOBJ)$/;
+            next if $p =~ /^(?:REPLY|SWITCH|MODE|PRIORITY|TIMEOUT|RETOBJ|CALLBACK|CLBK_ARG)$/;
             my $pp = $p eq 'DOBJ' ? keyDirectObject : lc $p;
             croak "'$p' parameter not available" unless exists $params->{$pp};
             _params($self, $evt, $params->{$pp}, $hash->{$p});
@@ -233,12 +240,14 @@ sub _primary {
         }
 
         my $mode =
-            ((exists $hash->{REPLY}         # check event setting
-                ? $hash->{REPLY}
-                : exists $self->{REPLY}     # check global setting
-                    ? $self->{REPLY}
-                    : 1                     # deafult is to wait
-            )
+            (ref $hash->{CALLBACK} eq 'CODE'
+                ? kAEQueueReply
+                : (exists $hash->{REPLY}    # check event setting
+                    ? $hash->{REPLY}
+                    : exists $self->{REPLY} # check global setting
+                        ? $self->{REPLY}
+                        : 1                 # deafult is to wait
+                )
                 ? kAEWaitReply
                 : kAENoReply)
 
@@ -273,7 +282,12 @@ sub _primary {
 
     local $AE_GET{typeObjectSpecifier()} = sub { (_obj_desc($self, $_[0]), 1) };
 
-    my @return = $retobj? $evt : $evt->get;
+    my @return = $retobj
+        ? $evt
+        : $evt->type && $evt->type eq typeAERecord
+            ? _fix_reco($self, {$evt->get})
+            : $evt->get;
+
     $^E = exists $evt->{ERRNO} ? $evt->{ERRNO} : 0; # restore errno
     return wantarray ? @return : $return[0];
 }
@@ -313,12 +327,23 @@ sub _do_list {
 sub _do_rec {
     my($self, $data, $type) = @_;
     my $reco = AECreateList('', 1) or confess "Can't create record: $^E";
+    my $class;
 
     while (my($k, $d) = each %{$data}) {
-        my $key = _get_name($self, $k);
+        if ($k =~ /^class$/i) {
+            $class = _get_id($self, $d);
+            next;
+        }
+        my $key = _get_id($self, $k);
         my($desc, $dispose) = _get_desc($self, $d);
         AEPutKeyDesc($reco, $key, $desc) or confess "Can't put $key/$desc into $reco: $^E";
         AEDisposeDesc $desc if $dispose;
+    }
+
+    if ($class) {
+        my $nreco = AECoerceDesc($reco, $class) or confess "Can't coerce to '$class': $^E";
+        AEDisposeDesc $reco;
+        $reco = $nreco;
     }
 
     return $reco;
@@ -336,7 +361,7 @@ sub _do_obj {
     $data = _get_objdesc($data);
     $ref = ref $data;
     if ($class eq 'property') {
-        $data = _get_name($self, $data) or croak "Can't find property '$data'.\n";
+        $data = _get_id($self, $data) or croak "Can't find property '$data'.\n";
         $form = typeProperty;
     } elsif ($ref eq 'AEDesc' || $ref eq 'AEObjDescType') {
         $data = &{$DESC_TYPE{$data->[0]}}($self, $class, @{$data}[1 .. $#{$data}])
@@ -587,7 +612,7 @@ sub _get_type {
     my $i = 0;
 
     if (defined $key) {
-        my $href = _get_name($self, $key, 1);
+        my $href = _get_id($self, $key, 1);
         $type = $href->{types}[$i++] if exists $href->{types};
     }
 
@@ -609,12 +634,12 @@ sub _get_data {
     my $ref = ref $data;
 
     if ($ref eq 'AEEnum') {
-        my $id = _get_name($self, $data->[0]);
+        my $id = _get_id($self, $data->[0]);
         $data = $id if defined $id;
         $type = typeEnumerated; # typeEnumerated or typeType ???
 
     } elsif ($type eq typeType) {
-        my $id = _get_name($self, $data);
+        my $id = _get_id($self, $data);
         $data = $id if defined $id;
 
     # see the %AE_PUT data structure
@@ -629,6 +654,34 @@ sub _get_data {
 # get class / property name
 
 sub _get_name {
+    my($self, $id) = @_;
+    if (exists $self->{IDS}{$id}) {
+        if (exists $self->{IDS}{$id}{name}) {
+            return $self->{IDS}{$id}{name};
+        }
+    }
+    return;
+}
+
+#=============================================================================#
+# fix record stuff
+
+sub _fix_reco {
+    my($self, $reco) = @_;
+    my %nreco;
+    for my $id (keys %$reco) {
+        my $nid = _get_name($self, $id);
+        my $ndt = ref $reco->{$id} eq 'HASH' ?
+            _fix_reco($self, $reco->{$id}) : $reco->{$id};
+        $nreco{$nid || $id} = $ndt;
+    }
+    return \%nreco;
+}
+
+#=============================================================================#
+# get class / property id
+
+sub _get_id {
     my($self, $name, $obj) = @_;
     (my $new = lc $name) =~ tr/ /_/;
     my $ref = $self->{NAMES}{$new} if exists $self->{NAMES}{$new};
@@ -804,14 +857,16 @@ sub _open_others {
 sub _merge_classes {
     my($db) = @_;
     if (!exists $MERGEDCLASSES{ $db->{ID} }) {
-        my $names = {};
+        my($ids, $names) = ({}, {});
         my($class, @classes) = ($db->{CLASS}, @OTHERCLASS);
 
         for my $c (keys %$class) {
             $names->{$c}{id} = $class->{$c}{id};
+            $ids->{$names->{$c}{id}}{name} = $c;
 
             for my $p (keys %{$class->{$c}{properties}}) {
                 $names->{$p}{id} ||= $class->{$c}{properties}{$p}[0];
+                $ids->{$names->{$p}{id}}{name} ||= $p;
                 unshift @{$names->{$p}{types}}, $class->{$c}{properties}{$p}[1];
             }
         }
@@ -819,9 +874,11 @@ sub _merge_classes {
         for my $tempc (@classes) {
             for my $c (keys %$tempc) {
                 $names->{$c}{id} ||= $tempc->{$c}{id};
+                $ids->{$names->{$c}{id}}{name} = $c;
 
-                for my $p (keys %{$tempc->{properties}}) {
+                for my $p (keys %{$tempc->{$c}{properties}}) {
                     $names->{$p}{id} ||= $tempc->{$c}{properties}{$p}[0];
+                    $ids->{$names->{$p}{id}}{name} ||= $p;
                     unshift @{$names->{$p}{types}}, $tempc->{$c}{properties}{$p}[1];
 
                     $class->{$c}{properties}{$p} = $tempc->{$c}{properties}{$p}
@@ -836,7 +893,7 @@ sub _merge_classes {
             }
         }
 
-        $MERGEDCLASSES{ $db->{ID} } = [$class, $names];
+        $MERGEDCLASSES{ $db->{ID} } = [$class, $names, $ids];
     }
     return @{$MERGEDCLASSES{ $db->{ID} }};
 }
@@ -848,11 +905,13 @@ sub _merge_enums {
     my($db, $self) = @_;
     if (!exists $MERGEDENUM{ $db->{ID} }) {
         my $names = $self->{NAMES};
+        my $ids = $self->{IDS};
         my($class, @classes) = ($db->{ENUM}, @OTHERENUM);
 
         for my $c (keys %$class) {
             for my $n (keys %{$class->{$c}}) {
                 $names->{$n}{id} ||= $class->{$c}{$n}{id};
+                $ids->{$names->{$n}{id}} ||= $n;
             }
         }
 
@@ -860,6 +919,7 @@ sub _merge_enums {
             for my $c (keys %$tempc) {
                 for my $n (keys %{$tempc->{$c}}) {
                     $names->{$n}{id} ||= $tempc->{$c}{$n}{id};
+                    $ids->{$names->{$n}{id}} ||= $n;
                 }
             }
         }
@@ -915,6 +975,7 @@ sub _merge_enums {
         my $data = _get_data('', $_[0], $type);
         return($data, $type);
     },
+    typeProcessSerialNumber() => sub { pack_psn($_[0]) },
 
     # just a guess here ... empty four bytes for lang code, maybe?
     'itxt'              => sub {'    ' . MacPack(typeChar, $_[0])},
@@ -1151,6 +1212,12 @@ back in as C<$psn>.
 You can also pass a path to an application:
 
     my $glue = Mac::Glue->new('My App', path => $path_to_file);
+
+New for Mac OS 9, you can send events over TCP/IP:
+
+    my $glue = Mac::Glue->new('My App', eppc => 'My App Name',
+        'some.machine.com');
+
 
 Once you have your glue set up, you start calling events, as they are
 documented in the POD file for the glue.  The events can be called
@@ -1475,7 +1542,7 @@ aspects of the event call's behavior.  They can be passed as parameters
 call made from that object).  They are all upper case.
 
     $glue->REPLY(1);            # wait for reply on all events
-    $glue->close(REPLY => 0);  # don't wait for this one event
+    $glue->close(REPLY => 0);   # don't wait for this one event
 
 =over 4
 
@@ -1550,39 +1617,85 @@ Nothing is exported by default.
     use Mac::Glue ':all';   # for more advanced things
 
 
+=head1 GOTCHAS
+
+=over 4
+
+=item *
+
+MAKE SURE F<site_perl> COMES FIRST IN YOUR LIBRARY PREFERENCES.
+Thank you.  :-)
+
+=item *
+
+Do NOT send an event to the MacPerl application itself and expect a reply.
+Instead, try C<$macperlglue-E<gt>REPLY(0)>.  Similarly, do not drop
+MacPerl onto F<gluemac>.  Instead, you can make a copy of the MacPerl
+application, and drop that on F<gluemac>.
+
+=item *
+
+You should have the latest cpan-mac distribution is installed.
+
+=item *
+
+You should delete old dialect glue files manually if running Mac OS 9.
+
+=back
+
+
 =head1 TODO / BUGS
 
 =over 4
 
-=item Add names to glue docs (for things like inheritance),
-replacing four-digit codes where appropriate
+=item *
 
-=item Specifying other attributes (transactions, etc.)
+Add names to glue docs, replacing four-digit codes for elements
 
-=item Add more coercions etc. to Mac::AppleEvents::Simple (feedback
+=item *
+
+Specifying other attributes (transactions, etc.)
+
+=item *
+
+Add more coercions etc. to Mac::AppleEvents::Simple (feedback
 wanted on this, let me know what I missed)
 
-=item Add comparison operators from glues
+=item *
 
-=item "tell" objects to do events
+Add comparison operators from glues
 
-=item New AETE flags in Mac OS 8.5?  Anything else new?  Anything
+=item *
+
+"tell" objects to do events
+
+=item *
+
+New AETE flags in Mac OS 8.5, Mac OS 9?  Anything else new?  Anything
 missing in backward compatibility to 7.5?
 
-=item System of versioning (for glues and target apps) for distribution
+=item *
+
+System of versioning (for glues and target apps) for distribution
 of modified glues
 
-=item MacPerl (I think) needs a new idle function for waiting for
+=item *
+
+MacPerl (I think) needs a new idle function for waiting for
 replies
 
-=item MacPerl hangs if it waits for a reply after sending an event to
+=item *
+
+MacPerl hangs if it waits for a reply after sending an event to
 itself
 
-=item Handlers?
+=item *
 
-=item Put proper aete names in returned records?
+Handlers?
 
-=item Add dynamic fetching of glues?
+=item *
+
+Add dynamic fetching of glues?
 
 =back
 
@@ -1590,6 +1703,32 @@ itself
 =head1 HISTORY
 
 =over 4
+
+=item v0.57, Tuesday, November 2, 1999
+
+Added conversion of keys in returned records back into the "English" names.
+
+Records containing C<class> parameter are coerced into descriptors of
+that class (i.e., C<{name =E<gt> 'foo', class =E<gt> 'disk'}>).
+
+Added support for events over TCP/IP (Mac OS 9 required).
+
+Note: if Keychain Access is used in Mac OS 9, the C<login> method may no
+longer be required for accessing of remote machines.
+
+Fixed bug in C<can> method; also changed how C<can> calls C<AUTOLOAD>.
+
+Added code for experimental callback stuff, undocumented,
+subject to change, and probably does not even work.
+
+Changed C<_get_name> to C<_get_id>, created new C<_get_name>.
+
+Updated dialect creation code for Mac OS 9 (aeut is now stored in
+the F<AppleScript> extension instead of a dialect file, but for
+Mac::Glue is still stored in the F<dialects> folder.  Instead
+of being called F<English>, it will likely be called F<AppleScript>.
+You should delete (or archive) old dialect glues manually.
+
 
 =item v0.56, Friday, September 10, 1999
 
@@ -1774,6 +1913,7 @@ Matthias Neeracher E<lt>neeri@iis.ee.ethz.chE<gt>,
 David Schooley E<lt>dcschooley@mediaone.netE<gt>,
 Graham Barr E<lt>gbarr@pobox.comE<gt>,
 John W Baxter E<lt>jwblist@olympus.netE<gt>,
+Marion Delgado E<lt>dhp@efn.orgE<gt>,
 Eric Dobbs E<lt>dobbs@visionlink.orgE<gt>,
 Josh Gemmell E<lt>joshg@ola.bc.caE<gt>,
 Nathaniel Irons E<lt>irons@espresso.hampshire.eduE<gt>,
@@ -1791,6 +1931,8 @@ Stephan Somogyi E<lt>somogyi@gyroscope.netE<gt>,
 Kevin Walker E<lt>kwalker@xmission.comE<gt>,
 Matthew Wickline E<lt>mattheww@wickline.orgE<gt>.
 
+
+
 (If I left your name out, please remind me.)
 
 =head1 SEE ALSO
@@ -1803,4 +1945,4 @@ Interapplication Communication.
 
 =head1 VERSION
 
-0.56, Friday, September 10, 1999
+v0.57, Tuesday, November 2, 1999

@@ -1,4 +1,5 @@
 #!perl -w
+# NOTE: position may not be able to be changed under Mac OS 9 Finder
 # need UnderMethods module, see below
 use UnderMethods;
 use Mac::Glue;

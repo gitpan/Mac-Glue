@@ -112,7 +112,7 @@ sub new {
     if ($dialect_file) {
 	my $RF = OpenResFile($dialect_file);
 	if (!defined($RF) || $RF == 0) {
-	    croak("No Resource Fork available for $path");
+	    croak("No Resource Fork available for $dialect_file");
 	}
 	my $aete_handle = Get1Resource("aeut", 0);
 	if (!defined($aete_handle) || $aete_handle == 0) {

@@ -1,4 +1,5 @@
 #!perl -wl
+# NOTE: position may not be able to be changed under Mac OS 9 Finder
 use Mac::Glue;
 use strict;
 

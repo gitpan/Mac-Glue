@@ -11,7 +11,7 @@ use strict;
 use vars qw(@ISA $VERSION);
 
 @ISA = qw(Mac::AETE::Parser);
-$VERSION = '0.30';
+$VERSION = '0.31';
 
 sub fixname {
     (my $ev = shift) =~ s/[^a-zA-Z0-9_]/_/g;
@@ -33,7 +33,7 @@ sub doc_enums {
         $text .= "=item '$n'\n\n=over 4\n\n";
         foreach my $e (keys %{$n{$n}}) {
             $text .= sprintf("=item %s (%s)%s\n\n", $e, $n{$n}{$e}{id},
-                $n{$n}{$e}{desc} ne '' ? ": $n{$n}{$e}{desc}" : '');
+                $n{$n}{$e}{desc} ne '' ? "\n\n$n{$n}{$e}{desc}" : '');
         }
         $text .= "=back\n\n";
     }
@@ -113,7 +113,7 @@ sub doc_classes {
         }
 
         $text .= sprintf("=item %s (%s)%s\n\n", $c, $c{$c}{id},
-            ($d{$c}{desc} ? ": $d{$c}{desc}" : ''));
+            ($d{$c}{desc} ? "\n\n$d{$c}{desc}" : ''));
 
         if (values %p) {
             $text .= "Properties:\n\n";
@@ -132,7 +132,10 @@ sub doc_classes {
         }
 
         if (values %e) {
-            $text .= "Elements: " . join(', ', sort keys %e) . "\n\n";
+            $text .= "Elements:\n\n    " . join(', ', sort
+                map { exists $self->{CLASSNAMES}{$_} ? $self->{CLASSNAMES}{$_} : $_ }
+                map { while (length($_) < 4) { $_ = "$_ " }; $_ }
+                keys %e) . "\n\n";
         }
 
     }

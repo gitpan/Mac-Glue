@@ -1,3 +1,13 @@
+blib/lib/Mac/AETE/App.pm
+blib/lib/Mac/AETE/Dialect.pm
+blib/lib/Mac/AETE/Format/Converter.pm
+blib/lib/Mac/AETE/Format/Dictionary.pm
+blib/lib/Mac/AETE/Format/Glue.pm
+blib/lib/Mac/AETE/Parser.pm
+blib/lib/Mac/Processes.pm
+blib/lib/Mac/Processes.xs
+blib/lib/MacCFM68K/auto/Mac/Processes/Processes
+blib/lib/MacPPC/auto/Mac/Processes/Processes
 ex/00\040README
 ex/Anarchie\040Pro\040stuff
 ex/AppleWorks\040stuff
@@ -16,13 +26,7 @@ ex/make\040Eudora\040hidden
 ex/open\040Netscape\040window
 ex/send\040Eudora\040Pro\040mail
 ex/volume\040names\040as\040string
-lib/Mac/AETE/App.pm
-lib/Mac/AETE/Dialect.pm
-lib/Mac/AETE/Format/Converter.pm
-lib/Mac/AETE/Format/Dictionary.pm
-lib/Mac/AETE/Format/Glue.pm
-lib/Mac/AETE/Parser.pm
-lib/Mac/Glue.pm
+Glue.pm
 scripts/gluedialect
 scripts/gluemac
 scripts/gluescriptadds
@@ -30,3 +34,4 @@ scripts/show_glue_pods
 MANIFEST
 Makefile.PL
 README
+test.pl
