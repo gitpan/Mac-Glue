@@ -18,10 +18,7 @@ my $mail = $e->make(
 	at => location(end => $box)
 );
 
-$e->set( $e->obj(field => 'Subject:', $mail), to => 'Alert!');
-$e->set( $e->obj(field => 'To:',      $mail), to => $InternetConfig{kICEmail()});
-
-$e->set( $e->prop(body => $mail), to => <<EOT);
+(my $msg = <<EOT) =~ s/\012/\015/g;  # blame AppleScript, not me
 Dear $InternetConfig{kICRealName()},
 
 I love Mac::Carbon and Mac::Glue.  They make me happy.
@@ -31,6 +28,10 @@ supply patches for it.
 Love,
 $InternetConfig{kICRealName()}
 EOT
+
+$mail->obj(field => 'Subject:')->set(to => 'Alert');
+$mail->obj(field => 'To:'     )->set(to => $InternetConfig{kICEmail()});
+$mail->prop('body')->set(to => $msg);
 
 $e->queue($mail);
 

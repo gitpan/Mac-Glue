@@ -1,3 +1,23 @@
+* v1.11, May 22, 2003
+
+   Add super-cool feature for calling event methods on object
+   specifier record objects (like $track->play).  See
+   "Shortcuts for object specifier records" in the docs for
+   more information.
+
+   Updated some of the examples to use this new feature.
+
+   Read-only flag in PODs was reversed.  It is recommended to re-create
+   all your glues, or just realize that "read-only" means it is writable,
+   and no note means it is read-only, in your old docs.  Or change them
+   all by hand.
+
+   Fix minor paths bug in call to Mac::Path::Util.  Require
+   more recent version of said module.
+
+   Added t/pod.t.
+
+
 * v1.10, May 13, 2003
 
    Major update for Mac OS X support.
@@ -27,6 +47,7 @@
 
    Skip directories when opening dialect/OSAX glues.
 
+
 * v1.01, January 15, 2002
 
    Clean up a bit for 5.6.
@@ -45,6 +66,7 @@
    Added error handling via ERRORS parameter / method.
 
    General cleanup, additional examples.
+
 
 * v0.58, November 16, 1999
 
@@ -96,6 +118,7 @@
 
    Added more documentation about using AEObjDesc objects.  (Jeff Lowrey)
 
+
 * v0.55, September 2, 1999
 
    Added extra arguments to new() to accept alternate targets.  PPC ports,
@@ -106,6 +129,7 @@
    with specified username and password.  Requires "Login As"
    OSAX from the GTQ Scripting Library.
 
+
 * v0.51, September 1, 1999
 
    Changed ordering of search in _find_event.
@@ -113,6 +137,7 @@
    Fixed doc problems in Mac::AETE::Format::Glue: inheritance
    classes are named, and optional parameters are properly
    denoted.
+
 
 * v0.50, July 12, 1999
 
@@ -123,6 +148,7 @@
 
    Gone to beta!  Woo!
 
+
 * v0.31, June 22, 1999
 
    Fixed bug that only found class names instead of class and property
@@ -132,6 +158,7 @@
    it back.
 
    Allow case-insensitive parameter names.
+
 
 * v0.30, June 16, 1999
 
@@ -159,6 +186,7 @@
    dialect creation.
 
    Tons of internal cleaning up.
+
 
 * v0.26, June 7, 1999
 
@@ -196,6 +224,7 @@
 
    Other miscellaneous changes.  Some cleaning up.
 
+
 * v0.25, May 30, 1999
 
    Add serializer option.
@@ -210,10 +239,12 @@
 
    Other miscellaneous changes.  Lots of cleaning up.
 
+
 * v0.20, May 22, 1999
 
    Complete rewrite.  Too many changes to bother mentioning, because
    I am lazy.
+
 
 * v0.09, October 13, 1998
 
@@ -224,6 +255,7 @@
    which is equivalent to:
 
       $obj->get( $obj->o(property => 'label_index', item => 'HD') );
+
 
 * v0.08, October 10, 1998
 
@@ -243,10 +275,12 @@
 
       use Mac::Glue::SomeApp qw(:all);
 
+
 * v0.07, September 30, 1998
 
    More documentation and bugfixes.  Having serious problems with
    AEObjDesc::DESTROY.
+
 
 * v0.06, September 29, 1998
 

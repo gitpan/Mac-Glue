@@ -6,9 +6,9 @@ my $g = new Mac::Glue 'Finder';
 my $sd = $g->prop('Startup Disk');
 my $all = $g->obj(disks => gAll);
 
-print "Startup disk:\n  ", $g->get( $g->prop(name => $sd) );
+print "Startup disk:\n  ", $sd->prop('name')->get;
 
 print "\nAll disks:\n",
-    map {"  $_\n"} sort $g->get( $g->prop(name => $all) );
+    map {"  $_\n"} sort $all->prop('name')->get;
 
 __END__

@@ -41,3 +41,4 @@ scripts/gluemac.PL
 scripts/gluescriptadds.PL
 scripts/show_glue_pods
 t/glue.t
+t/pod.t

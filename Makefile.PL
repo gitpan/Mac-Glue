@@ -18,7 +18,7 @@ WriteMakefile(
 	'MAN1PODS'		=> {},
 	'PREREQ_PM'	=> {
 		'Mac::Errors'                => 0.91,
-		'Mac::Path::Util'            => 0.08,
+		'Mac::Path::Util'            => 0.09,
     		'Mac::Apps::Launch'          => 1.81,
     		'Mac::AppleEvents'           => 1.25,
     		'Mac::AppleEvents::Simple'   => 1.03,

@@ -5,24 +5,20 @@ use Mac::Glue ':all';
 my $address = new Mac::Glue 'Address Book';
 
 # get the first AIM handle of the first Chris
-print $address->get( $address->prop(
+print $address->prop(
 	value      => aim_handle => 1,
 	person     => 1,
 	people     => whose(first_name => equals => "Chris")
-));
+)->get;
 
 # get everyone
-my @people = $address->get( $address->prop('people') );
+my @people = $address->prop('people')->get;
 
 # get their AIM handles
-for (@people) {
-	my $aim = $address->get( $address->prop(
-		value      => aim_handle => 1 => $_
-	));
+for my $person (@people) {
+	my $aim = $person->prop(value => aim_handle => 1)->get;
 	if ($aim) {
-		printf "%s: %s\n", $address->get( $address->prop(
-			name => $_
-		)), $aim;
+		printf "%s: %s\n", $person->prop('name')->get, $aim;
 	}
 }
 

@@ -131,7 +131,7 @@ sub doc_classes {
                             ? $self->{CLASSNAMES}{$c{$c}{properties}{$_}[1]}
                             : $c{$c}{properties}{$_}[1]),
                         $d{$c}{properties}{$_}, 
-                        ($c{$c}{properties}{$_}[4] ? ' (read-only)' : '')
+                        ($c{$c}{properties}{$_}[4] ? '' : ' (read-only)')
                     )
                 } (sort keys %p);
             $text .= "\n";
@@ -285,9 +285,9 @@ sub end_class {
 }
 
 sub write_property {
-    my($self, $name, $id, $class, $desc, $list, $enum, $rdonly) = @_;
+    my($self, $name, $id, $class, $desc, $list, $enum, $rdwr) = @_;
     my $ev = lc fixname($name);
-    $self->{C }{$self->{CC}}{properties}{$ev} = [$id, $class, $list, $enum, $rdonly];  # desc?
+    $self->{C }{$self->{CC}}{properties}{$ev} = [$id, $class, $list, $enum, $rdwr];  # desc?
     $self->{DC}{$self->{CC}}{properties}{$ev} = $desc;
 }
 

@@ -10,24 +10,22 @@ $aw->activate;
 $aw->make(new => 'document', at => location('front'));
 die $^E if $^E;
 
-$aw->set($text,
-    to => "the quick brown fox jumped over the perl lazy programmers.");
+$text->set(to => "the quick brown fox jumped over the perl lazy programmers.");
 die $^E if $^E;
 sleep(2);
 
-$aw->move(
-    $aw->obj(word => 8 => $text),
-    to => location(after => $aw->obj(word => 9 => $text))
+$text->obj(word => 8)->move(
+    to => location( after => $text->obj(word => 9) )
 );
 die $^E if $^E;
 
 printf("word contains 'e', begins with 'p', does not end with 's': %s\n",
-    $aw->get($aw->obj(
+    $text->obj(
         words => whose(AND =>
             [it => contains => 'e'], [it => begins_with => 'p'],
             [NOT => [it => ends_with => 's']]
-        ), $text)
-    )
+        )
+    )->get
 );
 
 __END__

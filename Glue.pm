@@ -31,9 +31,9 @@ use vars qw(
 );
 
 #=============================================================================#
-# $Id: Glue.pm,v 1.12 2003/05/13 04:41:11 pudge Exp $
-($REVISION) 	= ' $Revision: 1.12 $ ' =~ /\$Revision:\s+([^\s]+)/;
-$VERSION	= '1.10';
+# $Id: Glue.pm,v 1.13 2003/05/23 03:03:58 pudge Exp $
+($REVISION) 	= ' $Revision: 1.13 $ ' =~ /\$Revision:\s+([^\s]+)/;
+$VERSION	= '1.11';
 @ISA		= 'Exporter';
 @EXPORT		= ();
 $RESERVED	= 'REPLY|SWITCH|MODE|PRIORITY|TIMEOUT|RETOBJ|ERRORS|CALLBACK|CLBK_ARG';
@@ -575,7 +575,7 @@ sub _do_obj {
 	} else {
 		$form = formName;
 		if ($^O ne 'MacOS' && $class eq 'file') {
-			my $path = Mac::Path::Util->new($data, Mac::Path::Util::DARWIN);
+			my $path = Mac::Path::Util->new($data, { type => Mac::Path::Util::DARWIN });
 			$data = $path->mac_path;
 		}
 	}
@@ -1421,6 +1421,33 @@ for (gNull(), gAnd(), gOr(), gNot(), gGT(), gGE(), gEquals(),
 
 #=============================================================================#
 
+package Mac::AEObjDesc;
+
+use Carp;
+use vars '$AUTOLOAD';
+
+sub AUTOLOAD { # can?
+	my($self, @args) = @_;
+
+	(my $name = $AUTOLOAD) =~ s/^.*://;
+	return if $name eq 'DESTROY';
+
+	my $sub = $self->{GLUE}->can($name);
+	if ($sub) {
+		if ($name eq 'obj' || $name eq 'prop') {
+			push @args, $self;
+		} else {
+			unshift @args, $self;
+		}
+		$sub->($self->{GLUE}, @args);
+	} else {
+		# should this croak?  probably.  complain and come
+		# up with another idea if you don't like it.
+		croak "No event '$name' available from glue for '$self->{GLUE}{GLUENAME}'";
+	}
+}
+
+
 1;
 
 __END__
@@ -1533,13 +1560,12 @@ So, now that you are convinced this is cool, let's continue.
 
 =head2 Mac OS X
 
-Mac::Glue is MacPerl only, and does not work with perl under Mac OS X.
-However, it works with MacPerl under the Classic environment in Mac OS X.
-Mac::Glue now has ininitial support to create glues for Mac OS X apps,
-under Classic.  You won't be able to create glues for many apps while
-running Mac OS natively, since Mac OS X will need to launch the app;
-also, there are known problems with launching the apps, so you may need
-to start the app manually first before creating the glue.
+Mac OS X is supported by Mac::Glue now, although a few things will not
+work.  eppc targets are not supported.  Some apps that don't have creator
+IDs work, but some things may not work with them, as they have not been
+extensively tested.  And, of course, some glues and methods will behave
+differently, due to differences in application implementation (for example,
+the Finder's "clean up" event is not supported in Mac OS X at this writing).
 
 
 =head2 Creating a Glue
@@ -1945,6 +1971,31 @@ if not supplied.
 	);
 
 
+=head2 Shortcuts for object specifier records
+
+Object specifier records objects in Mac::Glue can be called with any
+method from the record's parent glue, and it will be passed to that
+method as the direct object.  Examples:
+
+	$tracks = $itunes->obj(tracks => $library);
+	$tracks = $library->obj('tracks');
+
+	@tracks = $itunes->get($tracks);
+	@tracks = $tracks->get;
+
+	$itunes->play($tracks[0]);
+	$tracks[0]->play;
+
+In the first example, the record C<$library> is the direct object in the
+obj() method, and so it can be flipped around with C<$library->obj('tracks')>.
+
+Then, in the second example, the resulting record, C<$tracks>, is
+called as the direct object of get().
+
+Similar is the third example, where the track we wish to play is the direct
+object of play().
+
+
 =head2 Special parameters and methods
 
 Special parameters can be passed in the event which control certain
@@ -2207,6 +2258,7 @@ Alex Harper E<lt>harper@misanthrope.netE<gt>,
 Nathaniel Irons E<lt>irons@espresso.hampshire.eduE<gt>,
 Dave Johnson E<lt>dave_johnson@ieee.orgE<gt>,
 Bart Lateur E<lt>bart.mediamind@ping.beE<gt>,
+Andy Lester E<lt>andy@petdance.comE<gt>,
 Jefferson R. Lowrey E<lt>lowrey@mailbag.comE<gt>,
 Mat Marcus E<lt>mmarcus@adobe.comE<gt>,
 Larry Moore E<lt>ljmoore@freespace.netE<gt>,
@@ -2235,4 +2287,4 @@ Interapplication Communication.
 
 =head1 VERSION
 
-v1.10, Tuesday, May 13, 2003
+v1.11, Thursday, May 22, 2003
