@@ -1,3 +1,36 @@
+* v1.17, Wednesday, February 18, 2004
+
+   Added option to target by PID, explicit option to target by bundle ID;
+   cleaned up docs. (has)
+
+   Only allow data type to be set to typeUnicodeText if Encode is available.
+
+   Don't include BOM in UTF-16 data (use big-endian instead).  (Bill Birkett)
+
+   Fix documentation on ERRORS handler, and handling of error description.
+   Add error code (e.g., "errAEDescNotFound").  Add an optional default
+   ERRORS handler (setting it to a value of 1).
+
+   Added typeLongDateTime (convert to/from Mac OS); added Time::Epoch.
+   (Lars Eggert)
+
+   Make AE records guess better at types.
+
+   Export %MacErrors in addition to $MacError.
+
+   No longer use Mac::Path::Util; we only used the module to convert from Unix
+   to Mac paths, and we sucked those few lines we needed from it into
+   Mac::Files.
+
+   Fix incorrect printing of some debugging information when debugging was not on.
+
+   Fix some spurious warnings.
+
+   Make folder class work like file in %AE_PUT.
+
+   Added getdata() method to fetch the data in a returned AEObjDesc (see docs).
+
+
 * v1.16, Wednesday, November 19, 2003
 
    There's a bug in perl 5.8.0-5.8.2 whereby -- depending on how your perl

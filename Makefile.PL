@@ -18,14 +18,15 @@ WriteMakefile(
 	'MAN1PODS'		=> {},
 	'PREREQ_PM'	=> {
 		'Mac::Errors'                => 0.91,
-		'Mac::Path::Util'            => 0.09,
     		'Mac::Apps::Launch'          => 1.81,
-    		'Mac::AppleEvents'           => 1.27,
-    		'Mac::AppleEvents::Simple'   => 1.08,
+    		'Mac::AppleEvents'           => 1.29,
+    		'Mac::AppleEvents::Simple'   => 1.11,
+    		'Mac::Files'                 => 1.08,
     		'Mac::Processes'             => 1.04,
 		'MLDBM'                      => 0,
 		'Storable'                   => 0,
     		'Test::More'                 => 0,
+    		'Time::Epoch'                => 0.02,
 # not required, but recommended
 #    		'Encode'                     => 0,
 	},

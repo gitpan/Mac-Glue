@@ -10,15 +10,15 @@ use Exporter;
 use Fcntl;
 use File::Basename;
 use File::Spec::Functions;
-use Mac::AppleEvents::Simple 1.03 ':all';
+use Mac::AppleEvents::Simple 1.11 ':all';
 use Mac::Apps::Launch 1.81;
-use Mac::Errors '$MacError';
-use Mac::Files;
+use Mac::Errors qw(%MacErrors $MacError);
+use Mac::Files 1.08;
 use Mac::Memory 1.20 ();
-use Mac::Path::Util 0.09;
 use Mac::Processes 1.04;
 use Mac::Types;
 use MLDBM ('DB_File', $Mac::Glue::Common::SERIALIZER);
+use Time::Epoch 'perl2epoch';
 
 use strict;
 use vars qw(
@@ -31,9 +31,9 @@ use vars qw(
 );
 
 #=============================================================================#
-# $Id: Glue.pm,v 1.19 2003/11/19 17:20:09 pudge Exp $
-($REVISION) 	= ' $Revision: 1.19 $ ' =~ /\$Revision:\s+([^\s]+)/;
-$VERSION	= '1.16';
+# $Id: Glue.pm,v 1.20 2004/02/18 07:59:04 pudge Exp $
+($REVISION) 	= ' $Revision: 1.20 $ ' =~ /\$Revision:\s+([^\s]+)/;
+$VERSION	= '1.17';
 @ISA		= 'Exporter';
 @EXPORT		= ();
 $RESERVED	= 'REPLY|SWITCH|MODE|PRIORITY|TIMEOUT|RETOBJ|ERRORS|CALLBACK|CLBK_ARG';
@@ -46,7 +46,7 @@ $RESERVED	= 'REPLY|SWITCH|MODE|PRIORITY|TIMEOUT|RETOBJ|ERRORS|CALLBACK|CLBK_ARG'
 		);
 @METHS		= qw(	ADDRESS AUTOLOAD can launch obj prop version	);
 
-@EXPORT_OK	= ( @Mac::AppleEvents::EXPORT, '$MacError', @SYMS );
+@EXPORT_OK	= ( @Mac::AppleEvents::EXPORT, '%MacErrors', '$MacError', @SYMS );
 %EXPORT_TAGS	= (
 			all	=> [@EXPORT, @EXPORT_OK],
 			glue	=> [@EXPORT, @SYMS],
@@ -181,7 +181,7 @@ sub ADDRESS {
 	my($self, $addtype, @add) = @_;
 
 	$self->{ADDRESS} = defined $addtype
-		? $addtype eq 'ppc'  || $addtype eq typeTargetID
+		? $addtype eq 'ppc'    || $addtype eq typeTargetID
 			? { typeTargetID() => pack_ppc($self->{ID}, @add) }
 
 		: $addtype eq 'eppc' && $^O eq 'MacOS'
@@ -190,8 +190,14 @@ sub ADDRESS {
 		: $addtype eq 'eppc'
 			? { typeApplicationURL() => pack_eppc_x(@add) }
 
-		: $addtype eq 'psn'  || $addtype eq typeProcessSerialNumber
+		: $addtype eq 'psn'    || $addtype eq typeProcessSerialNumber
 			? { typeProcessSerialNumber() => pack_psn($add[0]) } 
+
+		: $addtype eq 'pid'    || $addtype eq typeKernelProcessID
+			? { typeKernelProcessID() => pack_pid($add[0]) } 
+
+		: $addtype eq 'bundle' || $addtype eq typeApplicationBundleID
+			? { typeApplicationBundleID() => $add[0] } 
 
 		: $addtype eq 'path'
 			? { typeProcessSerialNumber() => _path_to_psn($add[0]) }
@@ -333,7 +339,7 @@ sub _primary {
 			my $pp = $p eq 'DOBJ' ? keyDirectObject : lc $p;
 			croak "'$p' parameter not available" unless exists $params->{$pp};
 			_params($self, $evt, $params->{$pp}, $hash->{$p}, $class, $event);
-			push @origargs, $pp, $p;
+			push @origargs, $pp, $hash->{$p};
 		}
 	}
 
@@ -422,13 +428,23 @@ sub _primary {
 	# what should error handler be passed?
 	if ($errno && $error_handler) {
 		my($package, $filename, $line) = caller(1);
+
+		$error_handler = \&_default_error_handler
+			if $error_handler eq 1;
+
+		my($err, $errs, $errc);
+		$err = $MacErrors{ $errno };
+		$errs = $err ? $err->description : '';
+		$errc = $err ? $err->symbol : '';
+
 		$return = $error_handler->({
 			_glue		=> $self,
 			_event		=> $evt,
 			glue		=> $self->{GLUENAME},
 			event		=> $name,
-			errs		=> $MacError,
+			errs		=> $errs,
 			errn		=> $errno,
+			errc		=> $errc,
 			line		=> $line,
 			'package'	=> $package,
 			filename	=> $filename,
@@ -438,6 +454,17 @@ sub _primary {
 	$^E = exists $evt->{ERRNO} ? $evt->{ERRNO} : 0; # really restore errno
 
 	return(wantarray ? @return : $return[0]) if $return;
+}
+
+#=============================================================================#
+
+sub _default_error_handler {
+	my($err, @args) = @_;
+	my $args = join ', ', @args;
+	warn sprintf("%s->%s(%s) event failed:\n%s (%d)\n%s\n",
+		$err->{glue}, $err->{event}, $args,
+		$err->{errc}, $err->{errn}, $err->{errs}
+	);
 }
 
 #=============================================================================#
@@ -534,17 +561,18 @@ EOT
 			next;
 		}
 		my $key = _get_id($self, $k);
-		my($desc, $dispose) = _get_desc($self, $d);
+		my $t = _get_type($self, $d, '', $k);
+		my($desc, $dispose) = _get_desc($self, $d, $t);
 		AEPutKeyDesc($reco, $key, $desc)
 			or confess "Can't put $key/$desc into $reco: $MacError";
 		if ($self->{_print_aes}) {
 			print <<EOT;
 AEPutKeyDesc($reco, $key, $desc);
 EOT
-		}
 			print <<EOT if $dispose;
 AEDisposeDesc($desc);
 EOT
+		}
 		AEDisposeDesc $desc if $dispose;
 	}
 
@@ -599,9 +627,8 @@ sub _do_obj {
 
 	} else {
 		$form = formName;
-		if ($^O ne 'MacOS' && $class eq 'file') {
-			my $path = Mac::Path::Util->new($data, { type => Mac::Path::Util::DARWIN });
-			$data = $path->mac_path;
+		if ($^O ne 'MacOS' && $class =~ /^f(?:ile|older)$/i) {
+			$data = Mac::Files::_Unix2Mac($data);
 		}
 	}
 
@@ -946,7 +973,7 @@ sub _get_desc {
 
 	if ($ref eq 'Mac::AEParamType') {
 		($data, $type) = @{$data}[1, 0];
-	} elsif ($type eq typeObjectSpecifier && $ref ne 'Mac::AEObjDesc') {
+	} elsif ($type && $type eq typeObjectSpecifier && $ref ne 'Mac::AEObjDesc') {
 		$type = _check_default_type($data);
 	}
 
@@ -990,7 +1017,19 @@ sub _get_type {
 	if (defined $key) {
 		my $href = _get_id($self, $key, 1);
 		if (exists $href->{types}) {
-			($type) = grep { exists $AE_PUT{$_} } @{$href->{types}};
+			my @types = grep { exists $AE_PUT{$_} } @{$href->{types}};
+			for my $t (@types) {
+				if ($t eq typeUnicodeText) {
+					# only use if text is UTF, and Encode is available
+					if ($ENCODE && Encode::is_utf8($data)) {
+						$type = typeUnicodeText;
+						last;
+					}
+				} else {
+					$type = $t;
+					last;
+				}
+			}
 		}
 	}
 
@@ -1001,6 +1040,7 @@ sub _get_type {
 	return $type;
 }
 
+# check for UTF-ness?
 sub _check_default_type {
 	my($data) = @_;
 	my $type = $data =~ /^[+-]?\d+$/
@@ -1430,25 +1470,34 @@ sub _merge_enums {
 		return($data, $type);
 	},
 	typeProcessSerialNumber() => sub { pack_psn($_[0]) },
+	typeLongDateTime()	=> sub {
+		if ($^O ne 'MacOS') {
+			return pack_psn(perl2epoch($_[0], 'macos'));
+		} else {
+			return pack_psn($_[0]);
+		}
+	},
 
 	'file'			=> sub {
 		if ($^O ne 'MacOS') {
-			Mac::Path::Util->new($_[0])->mac_path;
+			return Mac::Files::_Unix2Mac($_[0]);
 		} else {
 			return $_[0];
 		}
 	},
 
-	# just a guess here ... empty four bytes for lang code, maybe?
+	# empty four bytes for lang code
 	typeIntlText()		=> sub {'    ' . MacPack(typeChar, $_[0])},
 	typeUnicodeText()	=> sub {
 		if ($ENCODE) {
-			return new AEDesc typeUnicodeText, Encode::encode('UTF-16', $_[0]);
+			return new AEDesc typeUnicodeText,
+				Encode::encode('UTF-16BE', $_[0]);
 		} else { # oh well!
 			return new AEDesc typeChar, $_[0];
 		}
 	}
 );
+$AE_PUT{folder} = $AE_PUT{file};
 
 %DESC_TYPE = (
 	formRange()	=> \&_do_range,
@@ -1493,6 +1542,17 @@ package Mac::AEObjDesc;
 
 use Carp;
 use vars '$AUTOLOAD';
+
+use Mac::AppleEvents;
+
+sub getdata {
+	my($self, $key) = @_;
+	my $desc = $self->{DESC};
+	return unless $desc && $desc->type eq typeObjectSpecifier;
+
+	my $data = AEGetKeyDesc($desc, $key || keyAEKeyData);
+	return $data->Mac::AppleEvents::Simple::_getdata;
+}
 
 sub AUTOLOAD { # can?
 	my($self, @args) = @_;
@@ -1670,45 +1730,52 @@ you like).
 	my $glue = Mac::Glue->new('My App');  # or My_App
 
 You can also pass in additional parameters for the type of target to use.
-For PPC ports, you can do this:
 
-	my $glue = Mac::Glue->new('My App', ppc => 'My App Name',
+=over 4
+
+=item * Bundle ID (Mac OS X only)
+
+	Mac::Glue->new('My App', bundle => 'com.example.MyApp');
+
+=item * Process Serial Number
+
+	Mac::Glue->new('My App', psn => $psn);
+
+=item * Process ID (Mac OS X only)
+
+	Mac::Glue->new('My App', pid => $pid);
+
+=item * Application path
+
+	Mac::Glue->new('My App', path => $path_to_file_or_bundle);
+
+=item * AppleTalk (Mac OS only)
+
+	Mac::Glue->new('My App', ppc => 'My App Name',
 		'Server Name', 'Zone');
 
-You may also specify a process serial number:
+=item * Application URL
 
-	my $glue = Mac::Glue->new('My App', psn => $psn);
+	Mac::Glue->new('My App', eppc => 'My App Name',	'mac.example.com',
+		$uid, $pid, $user, $pass);
 
-Note that C<$psn> should be a regular long integer, and will be packed into
-a double long behind the scenes.  If this confuses you, don't worry about
-it; the values returned from the Mac::Processes module are good to pass
-back in as C<$psn>.
+UID, PID, user, pass are optional (and ignored entirely for Mac OS 9).  It
+is recommended to use the Keychain to handle user/pass (just omit them, and
+you'll be prompted in a dialog box for them, with an option for the Keychain
+to remember them).
 
-You can also pass a path to an application:
+UID and PID are used if there's more than one target application, though
+these don't currently work in my tests.
 
-	my $glue = Mac::Glue->new('My App', path => $path_to_file);
+=back
 
-You can send events over TCP/IP:
+Addresses can be changed after the fact:
 
-	my $glue = Mac::Glue->new('My App', eppc => 'My App Name',
-		'mac.example.com');
-
-Also, the address can be changed after the fact:
-
-	my $glue = Mac::Glue->new('My App');
 	$glue->ADDRESS(eppc => 'My App Name', 'mac.example.com');
 
-For Mac OS X, you can also provide the user name and password:
+And to reset the address to the default, call the method with no parameters:
 
-	my $glue = Mac::Glue->new('My App', eppc => 'My App Name',
-		'mac.example.com', $uid, $pid, 'pudge', 'foobar');
-
-UID, PID, username, and password may be omitted (it is recommended
-to use the Keychain to avoid including username and password, and
-UID or PID are only needed if there is more than one potential
-target application with the same name).
-
-B<Note>: the UID/PID stuff doesn't actually work for me, in my tests.  Huh.
+	$glue->ADDRESS;
 
 Once you have your glue set up, you start calling events, as they are
 documented in the POD file for the glue.  The events can be called
@@ -1765,7 +1832,7 @@ nest them, with an arrayref as one of the values in the hashref, so the
 AE list is a datum for one of the keys in the AE record:
 
 	$glue->make(new => 'window', with_properties =>
-		{name => "New Window", position => [100, 200]});
+		{ name => "New Window", position => [100, 200] });
 
 The words "name" and "position" will be changed into the proper
 corresponding AE IDs.  And on return, record keys will be changed back
@@ -1777,7 +1844,7 @@ records and lists are turned into Perl hashes and arrays (recursively,
 for nested lists), etc.
 
 	my @urls = $sherlock->search_internet('AltaVista',
-		'for' => 'Mac::Glue');
+		for => 'Mac::Glue');
 
 AE objects (which will be discussed later) are returned as C<Mac::AEObjDesc>
 objects, so they may be used again by being passed back to another
@@ -2074,6 +2141,35 @@ Similar is the third example, where the track we wish to play is the direct
 object of play().
 
 
+=head2 Data from object specifier records
+
+Sometimes data will be returned from an application in an object specifier
+record, and you want to get the data underneath.  This isn't usually necessary,
+but it came up in the case of iPhoto, where iPhoto would return a 64-bit
+integer, but want a 32-bit integer or float to be sent back to it.
+
+Normally, just using the object specifier record the app returned should be
+sufficient, but in this case, it isn't.
+
+Example:
+
+	# how it should work
+	my $sel = $iphoto->prop('selection');
+	for my $photo ($sel->get) {
+		# ... do stuff with $photo
+	}
+
+	# how it works
+	my $sel = $iphoto->prop('selection');
+	for my $photo ($sel->get) {
+		my $id = $photo->getdata; # get data in usable form
+		my $newphoto = $iphoto->obj(photo =>
+			obj_form(formUniqueID, typeFloat, $id)
+		);
+		# ... do stuff with $newphoto
+	}
+
+
 =head2 Special parameters and methods
 
 Special parameters can be passed in the event which control certain
@@ -2123,23 +2219,32 @@ things with the data if you want to.
 
 A subroutine reference that will handle any errors (that is, will
 be executed only if C<$^E> is true) after the event is executed.
-Your handler will be passed 6 or more arguments:
+Your handler will be passed a hashref as its first argument, containing
+basic information about the event and error, followed by whatever
+arguments were passed to the event.  The hashref keys are:
 
-	0	The glue object
-	1	The event object (same object returned by RETOBJ)
-	2	The Glue's name
-	3	The event's name
-	4	The error message
-	5	The error number
-	6..n	Any arguments passed to the event in the first place
+	_glue     actual glue object
+	_event    Mac::AppleEvents::Simple object that produced the error
+	glue      name of the application glue
+	event     name of the event
+	errs      error string
+	errn      error number
+	line      line of the error
+	filename  filename of the error
+	package   package of the error
+
+If ERRORS is passed a value of C<1>, then the default error handler will be used.
+It is the same as the example error handler below.
 
 Example:
 
 	sub error_handler {
-		my($glue, $event, $gluename, $eventname,
-			$errs, $errn, @args) = @_;
+		my($err, @args) = @_;
 		my $args = join ', ', @args;
-		die "$gluename->$eventname($args) event failed:\n$errs\n";
+		warn sprintf("%s->%s(%s) event failed:\n%s (%d)\n%s\n",
+			$err->{glue}, $err->{event}, $args,
+			$err->{errc}, $err->{errn}, $err->{errs}
+		);
 	}
 
 	$finder->open(
@@ -2149,8 +2254,10 @@ Example:
 
 Result:
 
-	# Finder->open(DOBJ, Mac::AEObjDesc=HASH(0xc4c0814)) event failed:
-	No such object (OS error -1728)
+	Finder->(DOBJ, Mac::AEObjDesc=HASH(0xb0dc30)) event failed (-1728):
+	errAENoSuchObject
+	e.g.,: specifier asked for the 3rd, but there are only 2. Basically,
+	this indicates a run-time resolution error.
 
 =back
 
@@ -2354,7 +2461,11 @@ Ramesh R. E<lt>sram0mp@radon.comm.mot.comE<gt>,
 Axel Rose E<lt>rose@sj.comE<gt>,
 Stephan Somogyi E<lt>somogyi@gyroscope.netE<gt>,
 Kevin Walker E<lt>kwalker@xmission.comE<gt>,
-Matthew Wickline E<lt>mattheww@wickline.orgE<gt>.
+Matthew Wickline E<lt>mattheww@wickline.orgE<gt>,
+Simon Cozens E<lt>simon@simon-cozens.orgE<gt>,
+has E<lt>hamish.sanderson@virgin.netE<gt>,
+Bill Birkett E<lt>wbirkett@pcolor.comE<gt>,
+Lars Eggert E<lt>lars.eggert@netlab.nec.deE<gt>.
 
 (If I left your name out, please remind me.)
 
@@ -2371,4 +2482,4 @@ Interapplication Communication.
 
 =head1 VERSION
 
-v1.15, Tuesday, November 18, 2003
+v1.17, Wednesday, February 18, 2004

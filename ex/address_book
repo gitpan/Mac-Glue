@@ -9,8 +9,8 @@ my $handle = $address->obj(
 	aim_handle => 1,
 	person     => 1,
 	people     => whose(AND =>
-		[ first_name => equals => 'Chris'  ],
-		[ last_name  => equals => 'Nandor' ]
+		[ first_name => begins_with => 'Chris'  ],
+		[ last_name  => equals      => 'Nandor' ]
 	)
 );
 
