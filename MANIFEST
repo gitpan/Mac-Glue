@@ -28,6 +28,7 @@ ex/send\040Eudora\040Pro\040mail
 ex/volume\040names\040as\040string
 Glue.pm
 scripts/gluedialect
+scripts/glueedit
 scripts/gluemac
 scripts/gluescriptadds
 scripts/show_glue_pods

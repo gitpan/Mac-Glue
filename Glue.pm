@@ -35,11 +35,11 @@ use vars qw(
 
 #=============================================================================#
 
-$VERSION            = '0.57';
+$VERSION            = '0.58';
 @ISA                = 'Exporter';
 @EXPORT             = ();
 @SYMS               = qw(
-                        obj_form enum range whose location
+                        param_type obj_form enum range whose location
                         glueTrue glueFalse glueNext gluePrevious
                         glueFirst glueMiddle glueLast glueAny glueAll
                         gTrue gFalse gNext gPrevious
@@ -251,11 +251,11 @@ sub _primary {
                 ? kAEWaitReply
                 : kAENoReply)
 
-                | (exists $hash->{MODE}
-                    ? $hash->{MODE}
-                    : exists $self->{MODE}
-                        ? $self->{MODE}
-                        : (kAECanInteract | kAECanSwitchLayer));
+            | (exists $hash->{MODE}
+                ? $hash->{MODE}
+                : exists $self->{MODE}
+                    ? $self->{MODE}
+                    : (kAECanInteract | kAECanSwitchLayer));
 
         my $priority =
             exists $hash->{PRIORITY}
@@ -282,12 +282,15 @@ sub _primary {
 
     local $AE_GET{typeObjectSpecifier()} = sub { (_obj_desc($self, $_[0]), 1) };
 
-    my @return = $retobj
-        ? $evt
-        : $evt->type && $evt->type eq typeAERecord
-            ? _fix_reco($self, {$evt->get})
-            : $evt->get;
-
+    my @return;
+    if ($retobj) {
+        @return = $evt;
+    } elsif (my $type = $evt->type) {
+        @return = $evt->get;
+        @return = _fix_reco($self, {@return}) if $type eq typeAERecord;
+        @return = @{_fix_reco($self, \@return)} if $type eq typeAEList;
+    }
+    
     $^E = exists $evt->{ERRNO} ? $evt->{ERRNO} : 0; # restore errno
     return wantarray ? @return : $return[0];
 }
@@ -298,6 +301,12 @@ sub _primary {
 sub _params {
     my($self, $evt, $p, $data) = @_;
     my($key, $type) = @{$p}[0, 1];
+
+    if (ref $data eq 'Mac::AEParamType') {
+        ($data, $type) = @{$data}[0, 1];
+    } elsif ($type eq typeObjectSpecifier && ref $data ne 'Mac::AEObjDesc') {
+        $type = $data =~ /^[+-]?\d+$/ ? typeInteger : typeChar;
+    }
 
     my($desc, $dispose) = _get_desc($self, $data, $type);
     AEPutParamDesc($evt->{EVT}, $key, $desc) or confess "Can't put $key/$desc into event: $^E";
@@ -363,14 +372,14 @@ sub _do_obj {
     if ($class eq 'property') {
         $data = _get_id($self, $data) or croak "Can't find property '$data'.\n";
         $form = typeProperty;
-    } elsif ($ref eq 'AEDesc' || $ref eq 'AEObjDescType') {
-        $data = &{$DESC_TYPE{$data->[0]}}($self, $class, @{$data}[1 .. $#{$data}])
-            if $ref eq 'AEObjDescType';
+    } elsif ($ref eq 'AEDesc' || $ref eq 'Mac::AEObjDescType') {
+        $data = $DESC_TYPE{$data->[0]}->($self, $class, @{$data}[1 .. $#{$data}])
+            if $ref eq 'Mac::AEObjDescType';
         $dataform = $form = $data->type;
         if ($form eq typeCompDescriptor || $form eq typeLogicalDescriptor) {
             $form = formTest;
         }
-    } elsif ($ref eq 'AEObjDescForm') {
+    } elsif ($ref eq 'Mac::AEObjDescForm') {
         $form = $$data[0];
         $dataform = $$data[1] if @$data == 3;
         $data = $$data[-1];
@@ -633,7 +642,7 @@ sub _get_data {
 
     my $ref = ref $data;
 
-    if ($ref eq 'AEEnum') {
+    if ($ref eq 'Mac::AEEnum') {
         my $id = _get_id($self, $data->[0]);
         $data = $id if defined $id;
         $type = typeEnumerated; # typeEnumerated or typeType ???
@@ -644,7 +653,7 @@ sub _get_data {
 
     # see the %AE_PUT data structure
     } elsif (exists $AE_PUT{$type}) {
-        ($data, $t) = &{$AE_PUT{$type}}($data);
+        ($data, $t) = $AE_PUT{$type}->($data);
     }
 
     return($data, $t || $type);
@@ -667,15 +676,25 @@ sub _get_name {
 # fix record stuff
 
 sub _fix_reco {
-    my($self, $reco) = @_;
-    my %nreco;
-    for my $id (keys %$reco) {
-        my $nid = _get_name($self, $id);
-        my $ndt = ref $reco->{$id} eq 'HASH' ?
-            _fix_reco($self, $reco->{$id}) : $reco->{$id};
-        $nreco{$nid || $id} = $ndt;
+    my($self, $data) = @_;
+
+    if (ref $data eq 'ARRAY') {
+        my @narr;
+        for my $i (@$data) {
+            push @narr, (ref $i eq 'HASH' || ref $i eq 'ARRAY')
+                ? _fix_reco($self, $i) : $i;
+        }
+        return \@narr;
+    } elsif (ref $data eq 'HASH') {
+        my %nreco;
+        for my $id (keys %$data) {
+            my $nid = _get_name($self, $id);
+            my $i = $data->{$id};
+            $nreco{$nid || $id} = (ref $i eq 'HASH' || ref $i eq 'ARRAY')
+                ? _fix_reco($self, $i) : $i;
+        }
+        return \%nreco;
     }
-    return \%nreco;
 }
 
 #=============================================================================#
@@ -689,11 +708,11 @@ sub _get_id {
 }
 
 #=============================================================================#
-# get AEObjDesc
+# get Mac::AEObjDesc
 
 sub _get_objdesc {
     my $ref = ref $_[0];
-    if ($ref eq 'AEObjDesc') {
+    if ($ref eq 'Mac::AEObjDesc') {
         return $_[0]->{DESC};
     } else {
         return $_[0];
@@ -701,11 +720,11 @@ sub _get_objdesc {
 }
 
 #=============================================================================#
-# create AEObjDesc
+# create Mac::AEObjDesc
 
 sub _obj_desc {
     _save_desc($_[1]);
-    my $self = bless {GLUE => $_[0], DESC => $_[1]}, 'AEObjDesc';
+    my $self = bless {GLUE => $_[0], DESC => $_[1]}, 'Mac::AEObjDesc';
 }
 
 #=============================================================================#
@@ -754,13 +773,13 @@ sub prop {
 sub obj {
     my($self, @data, $obj, @obj) = @_;
 
-    if (ref($data[-1]) =~ /^AE(?:Obj)?Desc$/) { # @data % 2 && 
+    if (ref($data[-1]) =~ /^(Mac::)?AE(?:Obj)?Desc$/) { # @data % 2 && 
         $obj = pop @data;
     }
 
     for (my $i = 0; $i <= $#data; $i++) {
         my($k, $v) = $data[$i];
-        if (!($data[$i+1] && ref($data[$i+1]) =~ /^AE/) && _is_plural($self, $k)) {
+        if (!($data[$i+1] && ref($data[$i+1]) =~ /^(Mac::)?AE/) && _is_plural($self, $k)) {
             $v = gAll();
         } else {
             $i++;
@@ -780,15 +799,18 @@ sub obj {
 #=============================================================================#
 # exported functions
 
-sub enum ($)        { bless [@_], 'AEEnum' }
+sub enum ($)        { bless [@_], 'Mac::AEEnum' }
 
-sub obj_form ($$;$) { bless [@_], 'AEObjDescForm' }
+sub obj_form ($$;$) { bless [@_], 'Mac::AEObjDescForm' }
 
-sub whose           { bless [formTest, @_], 'AEObjDescType' }
+sub param_type ($$) { bless [@_], 'Mac::AEParamType' }
 
-sub range ($$)      { bless [formRange, @_], 'AEObjDescType' }
+sub whose           { bless [formTest, @_], 'Mac::AEObjDescType' }
 
-sub location ($;$); *location = *_do_loc{CODE};
+sub range ($$)      { bless [formRange, @_], 'Mac::AEObjDescType' }
+
+sub location ($;$);
+*location = *_do_loc{CODE};
 
 #=============================================================================#
 # launch the app (done automatically when an event is called if not running)
@@ -1182,6 +1204,7 @@ Along with the glue file is a POD file containing documentation for the
 glue, listing all the events (with parameters), classes (with
 properties), and enumerators, and descriptions of each.
 
+
 =head2 Using a Glue
 
 The first thing you do is call the module.
@@ -1260,15 +1283,25 @@ Mac::Glue will attempt to coerce passed data into the expected type.
 For example, if C<open> expects an alias, the file specification in
 C<$file> will be turned into an alias before being added to the event.
 
+You can override this behavior with the C<param_type> function.  If
+C<open> expects an alias (C<typeAlias>), but you want to pass text,
+you can do:
+
+    $glue->open( param_type($path, typeChar) );
+
 Each datum can be a simple scalar as above, an AEDesc object,
-an AEObjDesc object (returned by C<obj>, C<prop>, and event methods),
-an AEEnum object (returned by the C<enum> function), or an array or hash
+an Mac::AEObjDesc object (returned by C<obj>, C<prop>, and event methods),
+an Mac::AEEnum object (returned by the C<enum> function), or an array or hash
 reference, corresponding to AE lists and records.  In this example, we
 nest them, with an arrayref as one of the values in the hashref, so the
 AE list is a datum for one of the keys in the AE record:
 
     $glue->make(new => 'window', with_properties =>
         {name => "New Window", position => [100, 200]});
+
+The words "name" and "position" will be changed into the proper
+corresponding AE IDs.  And on return, record keys will be changed back
+from the AE IDs into the English words.
 
 Events return direct object parameters, turned into suitable data for
 use in the program.  Aliases are resolved into file specifications, AE
@@ -1278,7 +1311,7 @@ for nested lists), etc.
     my @urls = $sherlock->search_internet('AltaVista',
         'for' => 'Mac::Glue');
 
-AE objects (which will be discussed later) are returned as C<AEObjDesc>
+AE objects (which will be discussed later) are returned as C<Mac::AEObjDesc>
 objects, so they may be used again by being passed back to another
 event.
 
@@ -1345,11 +1378,19 @@ follows it.
 
     my $obj = $glue->obj(file => 'foo', folder => 'bar', disk => 'buz');
 
-"file", "folder", and "disk" are the classes.  The data are "foo",
-"bar", and "baz".  The form of each one is formName, and data type is
-typeChar (TEXT).  As for containers, the last pair is the container of the
-middle pair, which is the container of the first pair.  Easy, right?  That's the
-idea.
+So you have three pairs.  The key of each pair ("file", "folder", "disk")
+is the class.  The value of each pair ("foo", "bar", "baz") is the data.
+Because the data are each text, the form defaults to formName,
+and the data type defaults to typeChar (TEXT).  If the data is
+a number, then the form would be formAbsolutePosition, and the data type
+would be typeLongInteger.
+
+So that leaves only the container.  Each pair is contained by the pair
+following it.  The disk contains the folder, the folder contains the file.
+The disk has no container (its container is null).
+
+Easy, right?  I hope so.  That's the idea.  But let's go back to the
+forms, since that is the only tough part left.
 
 The primary forms are types, names, unique IDs, absolute positions,
 relative positions, tests, and ranges.  Normally, text data has form
@@ -1472,7 +1513,7 @@ records.
     $f->obj(CLASS => whose(PROPERTY, OPERATOR, VALUE));
 
 PROPERTY and CLASS => VALUE work like prop() and obj().  The PROPERTY
-form is the same as C<property => VALUE>.
+form is the same as C<property =E<gt> VALUE>.
 
 OPERATOR is C<contains>, C<equals>, C<begins_with>, C<ends_with>,
 C<l_t>, C<l_e>, C<g_t>, or C<g_e>.  VALUE is the value to compare to.
@@ -1581,26 +1622,15 @@ things with the data if you want to.
 
 =back
 
-=head2 Editing Glues
+=head2 Editing a Glue
 
-Eventually we'll have droplets for editing glues.
+There is an included droplet, F<glueedit>, for editing glues.  Drop
+a created glue on the droplet, and it will make a text file on the
+Desktop.  Edit it, and then drop the text file back on the droplet.
+Be careful; this obviously can be dangerous.  If you break something,
+you can use F<gluemac> to recreate the original glue, of course.
 
-
-=head1 TIPS
-
-=head2 Hide background apps
-
-  use Mac::Glue;
-  use Mac::Apps::Launch;
-  $a = new Mac::Glue 'Acrobat Exchange';
-  $a->launch;
-  Hide($a->{ID});
-
-  # now do your thing ...
-
-=head2 Other
-
-I will probably make a separate document at some point.  I dunno.
+Why would you edit a glue?  Well, sometimes AETE resources are wrong.  :)
 
 
 =head1 EXPORT
@@ -1615,6 +1645,33 @@ Nothing is exported by default.
 
     use Mac::Glue ':glue';  # good for most things
     use Mac::Glue ':all';   # for more advanced things
+
+
+=head1 TIPS
+
+=head2 Hide background apps
+
+  use Mac::Glue;
+  use Mac::Apps::Launch;
+  $a = new Mac::Glue 'Acrobat Exchange';
+  $a->launch;
+  Hide($a->{ID});
+
+  # now do your thing ...
+
+=head2 Scripting Addition Maintenance
+
+If you have a lot of scripting additions, it can slow down Mac::Glue
+(on startup) and take up more RAM.  Same thing goes for Mac OS in general;
+each installed additions takes up more RAM and has to be loaded into
+the system, taking up extra time.  So only keep installed the ones
+you want installed.
+
+If you have a huge scripting addition and you only want to use a small
+part of its functionality, you could also edit the glue and strip
+out portions you don't want.  This is not recommended for those who
+don't know precisely what they are doing, and the gains may be
+unnoticable anyway.
 
 
 =head1 GOTCHAS
@@ -1647,10 +1704,6 @@ You should delete old dialect glue files manually if running Mac OS 9.
 =head1 TODO / BUGS
 
 =over 4
-
-=item *
-
-Add names to glue docs, replacing four-digit codes for elements
 
 =item *
 
@@ -1703,6 +1756,20 @@ Add dynamic fetching of glues?
 =head1 HISTORY
 
 =over 4
+
+=item v0.58, Sunday, November 16, 1999
+
+Change all of the classes to have C<Mac::> at the beginning of them
+(except for ones that originate elsewhere, like C<AEDesc>, et al).
+
+Added C<Mac::AEParamType> and C<param_type>.
+
+If a parameter expects an AE object specifier record, and is not passed one,
+then it guesses the type and sets it to either C<typeChar> or C<typeInteger>.
+
+Made the conversion of keys into English names recursive with lists,
+in addition to records (i.e., lists can contain multiple records).
+
 
 =item v0.57, Tuesday, November 2, 1999
 
@@ -1927,6 +1994,7 @@ Vincent Nonnenmacher E<lt>dpi@pobox.oleane.comE<gt>,
 Henry Penninkilampi E<lt>htp@metropolis.net.auE<gt>,
 Peter Prymmer E<lt>pvhp@best.comE<gt>,
 Ramesh R. E<lt>sram0mp@radon.comm.mot.comE<gt>,
+Axel Rose E<lt>rose@sj.comE<gt>,
 Stephan Somogyi E<lt>somogyi@gyroscope.netE<gt>,
 Kevin Walker E<lt>kwalker@xmission.comE<gt>,
 Matthew Wickline E<lt>mattheww@wickline.orgE<gt>.
@@ -1945,4 +2013,4 @@ Interapplication Communication.
 
 =head1 VERSION
 
-v0.57, Tuesday, November 2, 1999
+v0.58, Sunday, November 16, 1999

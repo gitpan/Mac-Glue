@@ -1,4 +1,4 @@
-Tuesday, November 2, 1999
+Tuesday, November 16, 1999
 
 THIS IS BETA CODE.  BUT NOT FOR LONG.
 
@@ -15,8 +15,8 @@ It is cool.
 It is in beta.  Yay!
 
 
-GETTING STARTED
----------------
+GETTING STARTED, PART ONE
+-------------------------
 
 You need the latest cpan-mac installed.  It is cpan-mac 0.40,
 and available at:
@@ -27,8 +27,10 @@ Read the cpan-mac README for more information on it.  It contains
 all the modules you will need to use Mac::Glue (including
 some other really cool stuff).
 
-Make sure in your Preferences, set site_perl as a libraries
-path (so it will come before your main MacPerl lib directory).
+************************************************************************
+Make sure that in your MacPerl Preferences you set site_perl as a
+Libraries path (so it will come before your main MacPerl lib directory).
+************************************************************************
 
 You should also download the latest Mac::AppleEvents::Simple, which is
 currently version 0.81.
@@ -38,11 +40,15 @@ by their path and getting the right Process Serial Number. The module
 will be included in a future cpan-mac distribution, and then a future
 MacPerl distribution.
 
+
+GETTING STARTED, PART TWO
+--------------------------
+
 Drop the Mac-Glue archive, or the unpacked folder, on the
 installme droplet that came with cpan-mac.
 
 After installing, you need to run the gluedialect program and then the
-gluescriptadds program.
+gluescriptadds program.  These can be run just by double-clicking.
 
 Then, for each application you want to script, drop it on the gluemac
 droplet.  Applications should not be running, in general, when dropped

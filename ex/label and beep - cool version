@@ -1,26 +1,37 @@
 #!perl -w
-# NOTE: position may not be able to be changed under Mac OS 9 Finder
 # need UnderMethods module, see below
+
+# we need to change the view arrangement because of a "feature"
+# of Mac OS 9!
+
 use UnderMethods;
-use Mac::Glue;
+use Mac::Glue ':all';
 use strict;
 
-my($vol, $f, $volume, $label, $position, $oldpos);
+for (my $f = new Mac::Glue 'Finder') {
+    my($vol, $label, @orig, @prop);
 
-for ($f = new Mac::Glue 'Finder') {
     $vol      = prop('startup disk');
-    $position = prop('position', $vol);
     $label    = prop('label_index', $vol);
-    $oldpos   = get($position);
+    @prop = (
+        prop('position', $vol),
+        prop(spatial_view_arrangement => of => 'desktop'),
+        prop(button_view_arrangement => of => 'desktop'),
+    );
+    @orig = (get($prop[0]), get($prop[1]), get($prop[2]));
 
     activate();
-    set($position, to => [10, 40]);
+    set($prop[2], to => enum('not arranged'));
+    set($prop[1], to => enum('not arranged'));
+    set($prop[0], to => [10, 40]);
 
     for my $i (0 .. 2**5) {
         set($label, to => $i);
     }
 
-    set($position, to => $oldpos);
+    set($prop[0], to => $orig[0]);
+    set($prop[1], to => param_type($orig[1], typeEnumerated));
+    set($prop[2], to => param_type($orig[2], typeEnumerated));
 
     beep(3);
 }

@@ -8,10 +8,12 @@ use Mac::Glue;
 use MLDBM ('DB_File', $Mac::Glue::SERIALIZER);
 
 use strict;
-use vars qw(@ISA $VERSION);
+use vars qw(@ISA $VERSION $TYPE);
+
+$TYPE = 'McPp';
 
 @ISA = qw(Mac::AETE::Parser);
-$VERSION = '0.31';
+$VERSION = '0.32';
 
 sub fixname {
     (my $ev = shift) =~ s/[^a-zA-Z0-9_]/_/g;
@@ -145,7 +147,7 @@ sub doc_classes {
 }
 
 sub finish {
-    my($self) = @_;
+    my($self, $nopod) = @_;
     my %dbm;
 
     my $path = dirname($self->{OUTPUT});
@@ -165,6 +167,9 @@ sub finish {
     $dbm{COMPARISON}    = $self->{P};
     $dbm{ID}            = $self->{ID};
 
+    MacPerl::SetFileInfo('McPL', $TYPE, $self->{OUTPUT});
+    return 1 if $nopod;
+
     foreach (@{$self}{qw(START FINISH)}) {
         s/__APPNAME__/$self->{TITLE}/g;
         s/__APPID__/$self->{ID}/g;
@@ -178,7 +183,6 @@ sub finish {
 
     sysopen FILE, $file, O_CREAT|O_WRONLY|O_EXCL
         or die "Can't create file '$file': $!";
-    MacPerl::SetFileInfo(qw(McPL McPp), $self->{OUTPUT});
     MacPerl::SetFileInfo(qw(·uck TEXT), $file);
 
     print FILE $self->{START};
@@ -186,6 +190,8 @@ sub finish {
     print FILE doc_classes($self);
     print FILE doc_enums($self);
     print FILE $self->{FINISH};
+
+    return 1;
 }
 
 sub new {

@@ -18,12 +18,12 @@ die $^E if $^E;
 $finder->open($finder->obj(file => $file));
 die $^E if $^E;
 
-my @fields = $fm->get( $fm->prop(name => fields => database => 1));
+my @fields = $fm->get( $fm->prop(name => fields => database => 1) );
 
-my @data = $fm->get( $fm->obj(records => database => 1));
-if (! ref $data[0]) {
-    @data = [@data];
-}
+my @data = $fm->get( $fm->obj(records => database => 1) );
+if (ref $data[0] ne 'ARRAY') {  # if ref $data[0] eq 'ARRAY',
+    @data = [@data];            # we have more than one record;
+}                               # else there is one record
 
 set_format(@fields);
 
@@ -39,6 +39,9 @@ print "\n\nHere's all the records where the second cell isn't empty:\n";
     records => whose(NOT => [cell => 2 => equals => '']),
     database => 1)
 );
+if (ref $data[0] ne 'ARRAY') {
+    @data = [@data];
+}
 
 foreach (@data) {
     @temp = @$_;
