@@ -1,3 +1,20 @@
+* v1.20, Tuesday, May 19, 2004
+
+   Added more robust handling of bundle ID targetting, including making it
+   the default (requires Mac::AppleEvents::Simple 1.13); make SWITCH and
+   launch() work with bundle ID targets.
+
+   Allow creation of glues for non-scriptable apps (which can still
+   support a limited vocabulary, such as open()).
+
+   Create glues for Image Events.app and DiskImageMounter.app by default,
+   in addition to System Events.app.
+
+   Allow use of glue events with names like Can, Obj, Prop, Launch, Version.
+
+   Finally ported glueedit to Mac OS X, which allows modification of glues.
+
+
 * v1.19, Tuesday, March 23, 2004
 
    Made arrayrefs work better in some cases, e.g.:

@@ -169,7 +169,9 @@ sub finish {
     $dbm{CLASS}         = $self->{C};
     $dbm{EVENT}         = $self->{E};
     $dbm{COMPARISON}    = $self->{P};
-    $dbm{ID}            = $self->{_parser}{ID};
+    $dbm{CREATOR_ID}    = $self->{_parser}{ID};
+    $dbm{BUNDLE_ID}     = $self->{_parser}{BUNDLE_ID};
+    $dbm{ID}            = $self->{_parser}{BUNDLE_ID} || $self->{_parser}{ID};
     $dbm{APPNAME}       = $self->{_parser}{APPNAME};
     $dbm{VERSION}       = $self->{_parser}{VERSION};
 
@@ -178,7 +180,7 @@ sub finish {
 
     foreach (@{$self}{qw(START FINISH)}) {
         s/__APPNAME__/$self->{TITLE}/g;
-        s/__APPID__/$self->{_parser}{ID}/g;
+        s/__APPID__/$dbm{ID}/g;
     }
 
     local *FILE;
@@ -337,7 +339,7 @@ sub _init {
     $self{START} = <<'EOT';
 =head1 NAME
 
-__APPNAME__ Glue - Control __APPNAME__ app
+__APPNAME__ Glue - Control __APPNAME__ app (__APPID__)
 
 =head1 SYNOPSIS
 

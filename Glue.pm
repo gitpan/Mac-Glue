@@ -10,7 +10,7 @@ use Exporter;
 use Fcntl;
 use File::Basename;
 use File::Spec::Functions;
-use Mac::AppleEvents::Simple 1.11 ':all';
+use Mac::AppleEvents::Simple 1.13 ':all';
 use Mac::Apps::Launch 1.81;
 use Mac::Errors qw(%MacErrors $MacError);
 use Mac::Files 1.09;
@@ -31,9 +31,9 @@ use vars qw(
 );
 
 #=============================================================================#
-# $Id: Glue.pm,v 1.22 2004/03/24 04:40:05 pudge Exp $
-($REVISION) 	= ' $Revision: 1.22 $ ' =~ /\$Revision:\s+([^\s]+)/;
-$VERSION	= '1.19';
+# $Id: Glue.pm,v 1.23 2004/05/19 07:27:16 pudge Exp $
+($REVISION) 	= ' $Revision: 1.23 $ ' =~ /\$Revision:\s+([^\s]+)/;
+$VERSION	= '1.20';
 @ISA		= 'Exporter';
 @EXPORT		= ();
 $RESERVED	= 'REPLY|SWITCH|MODE|PRIORITY|TIMEOUT|RETOBJ|ERRORS|CALLBACK|CLBK_ARG';
@@ -161,6 +161,8 @@ sub new {
 	$self = {
 		_DB		=> $db,
 		ID		=> $db->{ID},
+		CREATOR_ID	=> $db->{CREATOR_ID} || $db->{ID},
+		BUNDLE_ID	=> $db->{BUNDLE_ID},
 		GLUENAME	=> $app,
 		APPNAME		=> $db->{APPNAME},
 		VERSION		=> $db->{VERSION},
@@ -182,10 +184,10 @@ sub ADDRESS {
 
 	$self->{ADDRESS} = defined $addtype
 		? $addtype eq 'ppc'    || $addtype eq typeTargetID
-			? { typeTargetID() => pack_ppc($self->{ID}, @add) }
+			? { typeTargetID() => pack_ppc($self->{CREATOR_ID}, @add) }
 
 		: $addtype eq 'eppc' && $^O eq 'MacOS'
-			? { typeTargetID() => pack_eppc($self->{ID}, @add) }
+			? { typeTargetID() => pack_eppc($self->{CREATOR_ID}, @add) }
 
 		: $addtype eq 'eppc'
 			? { typeApplicationURL() => pack_eppc_x(@add) }
@@ -204,8 +206,13 @@ sub ADDRESS {
 
 		: { $addtype => $add[0] }
 
-	: { typeApplSignature() => $self->{ID} };
+	: $self->{BUNDLE_ID}
+		? { typeApplicationBundleID() => $self->{BUNDLE_ID}  }
+		: { typeApplSignature()       => $self->{CREATOR_ID} };
 
+	# $self->{ID} will only be '????' if we could not identify
+	# a creator ID *or* a bundle ID (or for older glues that
+	# don't do bundle ID)
 	if (! defined $addtype && $self->{ID} eq '????') {
 		$self->{ADDRESS} = 'PSN';
 	}
@@ -245,7 +252,9 @@ sub AUTOLOAD {
 	# catch other-case versions of already-installed methods
 	unless ($sub) {
 		(my $auto = $AUTOLOAD) =~ s/:([^:]+)$/:\L$1/;
-		$sub = $auto if defined &$auto;
+		if ($auto !~ /^can|obj|prop|launch|version$/) {
+			$sub = $auto if defined &$auto;
+		}
 	}
 
 	# define method if we can find it in the glue table
@@ -465,6 +474,7 @@ sub _default_error_handler {
 		$err->{glue}, $err->{event}, $args,
 		$err->{errc}, $err->{errn}, $err->{errs}
 	);
+	return 1;
 }
 
 #=============================================================================#
@@ -1022,7 +1032,7 @@ EOT
 
 sub _get_type {
 	my($self, $data, $type, $key) = @_;
-
+	return '' if ref $data;
 	if (defined $key) {
 		my $href = _get_id($self, $key, 1);
 		if (exists $href->{types}) {
@@ -1281,8 +1291,11 @@ sub launch {
 	my($self, $location) = @_;
 	if (defined $location) {
 		LaunchSpecs($location);
+	} elsif ($self->{BUNDLE_ID}) {
+		$location = LSFindApplicationForInfo(undef, $self->{BUNDLE_ID});
+		LaunchSpecs($location);
 	} else {
-		LaunchApps($self->{ID});
+		LaunchApps($self->{CREATOR_ID});
 	}
 }
 
@@ -1336,16 +1349,6 @@ sub _open_others {
 		}
 	}
 	chdir $curdir or confess "Can't chdir to '$curdir': $!";
-
-# would this even help anything?  BAH!
-# 	tie my %merged, 'MLDBM', catfile($MACGLUEDIR, "gluemergecache"), O_RDWR or confess "Can't tie '$_': $!";
-# 	if ($merged{EVENT} ne "@$OTHEREVENT" || $merged{CLASS} ne "@$OTHERCLASS" || $merged{ENUM} ne "@$OTHERENUM") {
-# 		$MERGEDCLASSES	= $merged{CLASSES} = {};
-# 		$MERGEDENUM	= $merged{ENUM} = {};
-# 	} else {
-# 		$MERGEDCLASSES	= $merged{CLASSES};
-# 		$MERGEDENUM	= $merged{ENUM};
-# 	}
 }
 
 #=============================================================================#
@@ -1597,7 +1600,7 @@ Mac::Glue - Control Mac apps with Apple event terminology
 
 	use Mac::Glue;
 	my $glue = Mac::Glue->new('Finder');
-	$glue->open( $glue->prop('System Folder') );
+	$glue->prop('System Folder')->open;
 	# see rest of docs for lots more info
 
 =head1 DESCRIPTION
@@ -1706,7 +1709,7 @@ at this writing).
 =head2 Creating a Glue
 
 In order to script an application with Mac::Glue, a glue must be created
-first.  For that, the application is dropped on the F<gluemac> droplet.
+first.  For that, the application is passed to the F<gluemac> script.
 A distribution called Mac::AETE, created by David Schooley, is used to
 parse an application's AETE resource, and the glue is written out to a
 file using Storable, DB_File, and MLDBM.  Glues are saved in
@@ -1835,10 +1838,10 @@ you can do:
 
 Each datum can be a simple scalar as above, an AEDesc object,
 an Mac::AEObjDesc object (returned by C<obj>, C<prop>, and event methods),
-an Mac::AEEnum object (returned by the C<enum> function), or an array or hash
-reference, corresponding to AE lists and records.  In this example, we
-nest them, with an arrayref as one of the values in the hashref, so the
-AE list is a datum for one of the keys in the AE record:
+an Mac::AEEnum object (returned by the C<enum> function, see L<EXPORT>),
+or an array or hash reference, corresponding to AE lists and records.
+In this example, we nest them, with an arrayref as one of the values in
+the hashref, so the AE list is a datum for one of the keys in the AE record:
 
 	$glue->make(new => 'window', with_properties =>
 		{ name => "New Window", position => [100, 200] });
@@ -1944,9 +1947,9 @@ forms, since that is the only tough part left.
 The primary forms are types, names, unique IDs, absolute positions,
 relative positions, tests, and ranges.  Normally, text data has form
 name and type TEXT.  Integer data has absolute position form, and
-integer type.  The C<obj_form> function accepts three parameters, which
-allows you to set the form and data, or form, type, and data, in case
-you want to send data different from how Mac::Glue would guess.
+integer type.  The C<obj_form> function (see L<EXPORT>) accepts three
+parameters, which allows you to set the form and data, or form, type, and
+data, in case you want to send data different from how Mac::Glue would guess.
 
 These two are the same, since in the second case, the other is assumed:
 
@@ -2044,6 +2047,8 @@ The C<range> function accepts two arguments, the start and stop ranges.
 
 	range(START, STOP)
 
+(See L<EXPORT>.)
+
 Each can be a number index, an absolute position constant, a string, or
 another data type passed with C<obj_form>.  Here are a few ways to specify
 files in the System Folder:
@@ -2061,6 +2066,8 @@ records.
 	# comparison record
 	$f->obj(CLASS => whose(CLASS => VALUE, OPERATOR, VALUE));
 	$f->obj(CLASS => whose(PROPERTY, OPERATOR, VALUE));
+
+(See L<EXPORT>.)
 
 PROPERTY and CLASS => VALUE work like prop() and obj().  The PROPERTY
 form is the same as C<property =E<gt> VALUE>.
@@ -2103,6 +2110,8 @@ specifier records, but is not exactly the same thing.
 It's called an I<insertion location record>, and is created like this:
 
 	location(POSITION[, OBJECT])
+
+(See L<EXPORT>.)
 
 POSITION is a string, and can be one of C<before>, C<after>, C<beginning>,
 or C<end>.  C<front> is a synonym for C<beginning>, and C<back> and C<behind>
@@ -2177,6 +2186,13 @@ Example:
 		);
 		# ... do stuff with $newphoto
 	}
+
+Another workaround is to merely act on the object without fetching it.
+
+	my $sel = $iphoto->prop('selection');
+	# ... do stuff with $sel
+
+Results may vary.
 
 
 =head2 Special parameters and methods
@@ -2487,8 +2503,3 @@ Interapplication Communication.
 	http://projects.pudge.net/
 
 =cut
-
-
-=head1 VERSION
-
-v1.19, Wednesday, March 23, 2004

@@ -131,18 +131,20 @@ sub new {
     my $self = {};
     my $aete_handle;
     
-    my($name, $running, $sign, $pname) = &get_app_status_and_launch($target);
+    my($name, $running, $sign, $pname, $bundle) = &get_app_status_and_launch($target);
     return unless $name;
 
-    $self->{_target} = $name;
-    $self->{ID}      = $sign;
-    $self->{APPNAME} = $pname;
+    $self->{_target}   = $name;
+    $self->{ID}        = $sign;
+    $self->{BUNDLE_ID} = $bundle;
+    $self->{APPNAME}   = $pname;
 
     if ($running) {
         ($aete_handle, $self->{VERSION}) = get_aete_via_event($target, $sign);
         unless ($aete_handle) {
-            carp("The application is not scriptable");
-            return;
+            $aete_handle = [];
+#            carp("The application is not scriptable");
+#            return;
         }
     } else {
         my $RF;
@@ -152,6 +154,8 @@ sub new {
             $RF = FSOpenResourceFile($self->{_target}, "rsrc", fsRdPerm) ||
                   FSOpenResourceFile($self->{_target}, "data", fsRdPerm);
         }
+=pod
+
         if ( !defined($RF) || $RF == 0) {
             carp("No Resource Fork available for $target");
             return;
@@ -163,6 +167,15 @@ sub new {
         }
         $aete_handle = new Handle $temp_handle->get;
         CloseResFile($RF);
+=cut
+        unless ( !defined($RF) || $RF == 0) {
+            my $temp_handle = Get1Resource('aete', 0);
+            unless (!defined($temp_handle) || $temp_handle == 0) {
+                $aete_handle = new Handle $temp_handle->get;
+            }
+            CloseResFile($RF);
+        }
+        $aete_handle ||= [];
     }
 
     my $newself = Mac::AETE::Parser->new($aete_handle, $target, $self);
@@ -176,7 +189,7 @@ sub get_app_status_and_launch
 {
     my ($app_path) = @_;
     my ($name, $path, $suffix, $running, $ok_to_launch, $pname, $launch);
-    my ($psn, $psi, $sign);
+    my ($psn, $psi, $sign, $bundle);
 
     $running = 0;
 
@@ -189,6 +202,25 @@ sub get_app_status_and_launch
         my $fh = gensym();
         open $fh, "<" . $pkginfo or croak "Can't open $pkginfo: $!";
         (my($type), $sign) = (<$fh> =~ /^(.{4})(.{4})$/);
+
+        my $infoplist = catfile($app_path, 'Contents', 'Info.plist');
+        if (-f $infoplist) {
+            my $fh = gensym();
+            open $fh, "<" . $infoplist or croak "Can't open $infoplist: $!";
+            my $text = join '', <$fh>;
+            $text =~ s/\015/\n/g;
+            my $i = 0;
+            for (split /\n/, $text) {
+                if ($i) {
+                    m|^\s*<string>([^<\s]+)</string>\s*$|;
+                    $bundle = $1;
+                    last;
+                } elsif (m|^\s*<key>CFBundleIdentifier</key>\s*$|) {
+                    $i = 1;
+                }
+            }
+        }
+
         for $psn (keys %Process) {
             my $psi = $Process{$psn};
             $pname = $psi->processName;
@@ -255,7 +287,7 @@ sub get_app_status_and_launch
         }
     }
     $name = $app_path if $name !~ /:/;
-    ($name, $running, $sign, $pname);
+    ($name, $running, $sign, $pname, $bundle);
 }
 
 sub get_aete_via_event

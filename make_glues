@@ -4,7 +4,8 @@ use Mac::MoreFiles;
 
 my($lib, $script) = @ARGV;
 my @apps = 'MACS'; # Finder
-push @apps, 'sevs' if $^O ne 'MacOS'; # System Events
+# System Events, Image Events, DiskImageMounter
+push @apps, 'sevs', 'imev', 'ddsk' if $^O ne 'MacOS';
 my @paths = map { $Application{$_} } @apps;
 
 system($^X, $lib, "$script/gluedialect", '-I');

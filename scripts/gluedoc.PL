@@ -22,66 +22,10 @@ print OUT <<'!NO!SUBS!';
 use strict;
 use warnings;
 
-use File::Basename;
-use File::Spec::Functions;
-use Getopt::Std;
-use Mac::Glue::Common qw($MACGLUEDIR);
-
-(my $VERSION) = ' $Revision: 1.3 $ ' =~ /\$Revision:\s+([^\s]+)/;
-my $PROGNAME = basename($0);
-
-my %opts;
-usage('Options used incorrectly') unless getopts('hvadLUtuml', \%opts);
-usage() if $opts{'h'} || (!@ARGV && !$opts{'L'});
-version() if $opts{'v'};
-
-my $switches = [ '-F', map { '-' . $_ } grep { $opts{$_} } qw(U t u m l) ];
-
-my $glue = lc(shift @ARGV) || '';
-(my $glue1 = $glue) =~ tr/ /_/;
-(my $glue2 = $glue) =~ tr/_/ /;
-
-my @dirs;
-push @dirs, '' if ( (!$opts{'a'} && !$opts{'d'}) || $opts{'L'});
-push @dirs, 'additions' if $opts{'a'} || $opts{'L'};
-push @dirs, 'dialects'  if $opts{'d'} || $opts{'L'};
-
-my %list;
-OUTER: for my $dir (@dirs) {
-	my $d = catfile($MACGLUEDIR, $dir);
-	opendir my $dh, $d or die $!;
-	for my $f (readdir $dh) {
-		if ($opts{'L'} && $f =~ /\.pod$/) {
-			push @{$list{$dir}}, $f;
-			next;
-		}
-
-		my $file = catfile($d, $f);
-		next unless -f $file;		
-
-		for (lc $f) {
-			if (/^(?:\Q$glue\E|\Q$glue1\E|\Q$glue2\E)\.pod$/) {
-				system('perldoc', @$switches, $file);
-				last OUTER;
-			}
-		}
-	}
-}
-
-if ($opts{'L'}) {
-	for my $dir (sort keys %list) {
-		printf "%s:\n", (ucfirst($dir) || "Glues");
-		printf "  %s\n", join "\n  ", map { s/\.pod//; $_ } sort @{$list{$dir}};
-		print "\n";
-	}
-}
-
-
-
-sub usage {
-	print "*** $_[0]\n" if $_[0];
-	# Remember to doublecheck these match getopts()!
-	print <<EOT;
+BEGIN {
+	($Mac::Glue::Common::PROGVERSION) =
+		' $Revision: 1.4 $ ' =~ /\$Revision:\s+([^\s]+)/;
+	$Mac::Glue::Common::PROGDESC = <<'EOT';
 Usage: $PROGNAME [OPTIONS] GLUE
 
 This is a frontend to perldoc.  It searches for the docs of glues used
@@ -109,20 +53,57 @@ Options for perldoc (see man perldoc for more information):
 	-U	run insecurely
 
 EOT
-	exit;
+	$Mac::Glue::Common::PROGOPTS = 'hvadLUtuml';
 }
 
-sub version {
-	print <<EOT;
-$PROGNAME $VERSION
+use File::Basename;
+use File::Spec::Functions;
+use Mac::Glue::Common;
 
-Copyright (c) 1998-2003 Chris Nandor.  All rights reserved.  This program
-is free software; you can redistribute it and/or modify it under the same
-terms as Perl itself.
+my $opts = opts();
+usage() if !@ARGV && !$opts->{'L'};
 
-EOT
-	exit;
+my $switches = [ '-F', map { '-' . $_ } grep { $opts->{$_} } qw(U t u m l) ];
+
+my $glue = lc(shift @ARGV) || '';
+(my $glue1 = $glue) =~ tr/ /_/;
+(my $glue2 = $glue) =~ tr/_/ /;
+
+my @dirs;
+push @dirs, '' if ( (!$opts->{'a'} && !$opts->{'d'}) || $opts->{'L'});
+push @dirs, 'additions' if $opts->{'a'} || $opts->{'L'};
+push @dirs, 'dialects'  if $opts->{'d'} || $opts->{'L'};
+
+my %list;
+OUTER: for my $dir (@dirs) {
+	my $d = catfile($MACGLUEDIR, $dir);
+	opendir my $dh, $d or die $!;
+	for my $f (readdir $dh) {
+		if ($opts->{'L'} && $f =~ /\.pod$/) {
+			push @{$list{$dir}}, $f;
+			next;
+		}
+
+		my $file = catfile($d, $f);
+		next unless -f $file;		
+
+		for (lc $f) {
+			if (/^(?:\Q$glue\E|\Q$glue1\E|\Q$glue2\E)\.pod$/) {
+				system('perldoc', @$switches, $file);
+				last OUTER;
+			}
+		}
+	}
 }
+
+if ($opts->{'L'}) {
+	for my $dir (sort keys %list) {
+		printf "%s:\n", (ucfirst($dir) || "Glues");
+		printf "  %s\n", join "\n  ", map { s/\.pod//; $_ } sort @{$list{$dir}};
+		print "\n";
+	}
+}
+
 
 __END__
 !NO!SUBS!

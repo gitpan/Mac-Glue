@@ -114,6 +114,7 @@ sub new {
     $self->{_target}     = $target;
     $self->{_suite_list} = ();
     $self->{ID}          = $data->{ID};
+    $self->{BUNDLE_ID}   = $data->{BUNDLE_ID};
     $self->{APPNAME}     = $data->{APPNAME};
     $self->{VERSION}     = $data->{VERSION};
 
