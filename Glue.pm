@@ -31,9 +31,9 @@ use vars qw(
 );
 
 #=============================================================================#
-# $Id: Glue.pm,v 1.18 2003/11/18 23:57:32 pudge Exp $
-($REVISION) 	= ' $Revision: 1.18 $ ' =~ /\$Revision:\s+([^\s]+)/;
-$VERSION	= '1.15';
+# $Id: Glue.pm,v 1.19 2003/11/19 17:20:09 pudge Exp $
+($REVISION) 	= ' $Revision: 1.19 $ ' =~ /\$Revision:\s+([^\s]+)/;
+$VERSION	= '1.16';
 @ISA		= 'Exporter';
 @EXPORT		= ();
 $RESERVED	= 'REPLY|SWITCH|MODE|PRIORITY|TIMEOUT|RETOBJ|ERRORS|CALLBACK|CLBK_ARG';
@@ -415,12 +415,12 @@ sub _primary {
 		@return = @{_fix_reco($self, \@return)} if $type eq typeAEList;
 	}
 
-	$^E = exists $evt->{ERRNO} ? $evt->{ERRNO} : 0; # restore errno
+	$^E = my $errno = exists $evt->{ERRNO} ? $evt->{ERRNO} : 0; # restore errno
 
 	my $return = 1;
 	# if error handler, only return if error handler returns true
 	# what should error handler be passed?
-	if ($^E && $error_handler) {
+	if ($errno && $error_handler) {
 		my($package, $filename, $line) = caller(1);
 		$return = $error_handler->({
 			_glue		=> $self,
@@ -428,12 +428,14 @@ sub _primary {
 			glue		=> $self->{GLUENAME},
 			event		=> $name,
 			errs		=> $MacError,
-			errn		=> $^E+0,
+			errn		=> $errno,
 			line		=> $line,
 			'package'	=> $package,
 			filename	=> $filename,
 		}, @origargs);
 	}
+
+	$^E = exists $evt->{ERRNO} ? $evt->{ERRNO} : 0; # really restore errno
 
 	return(wantarray ? @return : $return[0]) if $return;
 }

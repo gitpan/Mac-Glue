@@ -32,6 +32,7 @@ WriteMakefile(
 	'clean'	=> {
 		'FILES'	=> "Mac-Glue-* @scripts .makeglues"
 	},
+	'NO_META'		=> 1,
 );
 
 sub MY::postamble {

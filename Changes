@@ -1,3 +1,19 @@
+* v1.16, Wednesday, November 19, 2003
+
+   There's a bug in perl 5.8.0-5.8.2 whereby -- depending on how your perl
+   is compiled -- the value of $^E (see the Mac::Glue docs for details)
+   is modified when accessed.  This patch helps minimize the effect, so
+   at least the value is reliable right after a Mac::Glue event call.
+   This change makes the value of $^E more reliable even without the bug
+   in perl.
+
+   The problem still exists in using Mac::Errors and probably other code.
+   It will be fixed in perl 5.8.3 and later.  Here's a patch to your perl
+   if you want to fix it locally:
+   
+   http://nntp.x.perl.org/group/perl.perl5.porters/85393
+
+
 * v1.15, Tuesday, November 18, 2003
 
    Make "set" event look at direct object's type instead of defaulting
