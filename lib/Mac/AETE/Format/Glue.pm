@@ -11,7 +11,7 @@ use strict;
 use vars qw(@ISA $VERSION);
 
 @ISA = qw(Mac::AETE::Parser);
-$VERSION = '0.27';
+$VERSION = '0.30';
 
 sub fixname {
     (my $ev = shift) =~ s/[^a-zA-Z0-9_]/_/g;
@@ -57,7 +57,7 @@ sub doc_events {
 
         my @keys = sort keys %p;
         @keys = sort {
-            $a->[4] <=> $b->[4]
+            $b->[4] <=> $a->[4]
                     ||
             $a->[0] cmp $b->[0]
         } map {[
@@ -121,7 +121,9 @@ sub doc_classes {
                 map {
                     sprintf("    %s (%s/%s): %s%s\n", $_,
                         $c{$c}{properties}{$_}[0],
-                        $c{$c}{properties}{$_}[1],
+                        ($c{$c}{properties}{$_}[0] eq 'c@#^'
+                            ? $self->{CLASSNAMES}{$c{$c}{properties}{$_}[1]}
+                            : $c{$c}{properties}{$_}[1]),
                         $d{$c}{properties}{$_}, 
                         ($c{$c}{properties}{$_}[4] ? ' (read-only)' : '')
                     )
@@ -252,14 +254,15 @@ sub begin_class {
     my($self, $name, $id, $desc, $ev, $en, $c) = @_;
     $ev = lc fixname($name);
     $en = $ev;
-    $c = 2;
-    while (exists($self->{C}{$en})) {
-        $en = $ev . $c++;
-    }
+#     $c = 2;
+#     while (exists($self->{C}{$en})) {
+#         $en = $ev . $c++;
+#     }
     $self->{C }{$en}{id} = $id;
     $self->{C }{$en}{desc} = $desc;
     $self->{DC}{$en}{desc} = $desc;
     $self->{CC} = $en;
+    $self->{CLASSNAMES}{$id} = $en unless exists $self->{CLASSNAMES}{$id};
 }
 
 sub end_class {

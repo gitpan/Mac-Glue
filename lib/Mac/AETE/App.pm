@@ -17,7 +17,7 @@ package Mac::AETE::App;
 
 =head1 NAME
 
-App - reads the Macintosh Apple event dictionary from an application.
+Mac::AETE::App - reads the Macintosh Apple event dictionary from an application.
 
 
 =head1 SYNOPSIS
@@ -129,6 +129,7 @@ sub new {
     my $aete_handle;
     
     my($name, $running) = &get_app_status_and_launch($target);
+    return unless $name;
 
     $self->{_target} = $name;
 
@@ -168,15 +169,16 @@ sub get_app_status_and_launch
     $running = 0;
     fileparse_set_fstype("MacOS");
     ($name,$path,$suffix) = fileparse($app_path, "");
-    while (($psn, $psi) = each(%Process)) {
-        $pname = $psi->processName;
+    for $psn (keys %Process) {
+        $pname = $Process{$psn}->processName;
 #        print "$pname", "   $name\n";
         $running = 1, last if $pname eq $name;
     }
     if (!$running) {
         my $RF = OpenResFile($app_path);
         if (!defined($RF) || $RF == 0) {
-            croak ("No Resource Fork available for '$app_path': $^E");
+            carp("No Resource Fork available for '$app_path': $^E");
+            return;
         }
         my $check_resource =  Get1Resource('scsz', 0);
         if (!defined($check_resource) || $check_resource == 0) {
@@ -216,18 +218,18 @@ sub get_aete_via_event
         if ($result_desc->type eq typeAEList) {
             for (my $i = 1; $i <= AECountItems($result_desc); $i++) {
                 my $tmp_desc = AEGetNthDesc($result_desc, $i)
-                    or croak("Bad result from GetAETE!\n");
+                    or carp("Bad result from GetAETE!\n") and return;
                 my $aete_handle = $tmp_desc->data
-                    or croak("Bad result from GetAETE!\n");
+                    or carp("Bad result from GetAETE!\n") and return;
                 my $aete = new Handle($aete_handle->get)
-                    or croak("Bad result from GetAETE!\n");
+                    or carp("Bad result from GetAETE!\n") and return;
                 push @handles, $aete;
             }
        } else {
             my $aete_handle = $result_desc->data
-                or croak("Bad result from GetAETE!\n");
+                or carp("Bad result from GetAETE!\n") and return;
             my $aete = new Handle($aete_handle->get)
-                or croak("Bad result from GetAETE!\n");
+                or carp("Bad result from GetAETE!\n") and return;
             push @handles, $aete;
         }
         AEDisposeDesc $result_desc;

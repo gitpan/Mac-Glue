@@ -7,7 +7,7 @@ package Mac::AETE::Dialect;
 
 =head1 NAME
 
-Dialect - reads the Macintosh Apple event dictionary from an 
+Mac::AETE::Dialect - reads the Macintosh Apple event dictionary from an 
 Applescript dialect file.
 
 

@@ -7,7 +7,7 @@
 
 =head1 NAME
 
-Parser - parses Macintosh AETE and AEUT resources.
+Mac::AETE::Parser - parses Macintosh AETE and AEUT resources.
 
 
 =head1 SYNOPSIS

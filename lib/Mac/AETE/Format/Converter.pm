@@ -2,7 +2,7 @@
 # free software; you can redistribute it and/or modify it under the same 
 # terms as Perl itself.
 
-package Converter;
+package Mac::AETE::Format::Converter;
 
 @req = qw(OPT REQ);
 

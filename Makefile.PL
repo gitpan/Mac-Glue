@@ -3,5 +3,5 @@ use ExtUtils::MakeMaker;
 # the contents of the Makefile that is written.
 WriteMakefile(
     'NAME'	=> 'Mac::Glue',
-    'VERSION_FROM' => 'blib/lib/Mac/Glue.pm', # finds $VERSION
+    'VERSION_FROM' => 'lib/Mac/Glue.pm', # finds $VERSION
 );

@@ -1,8 +1,8 @@
 -----BEGIN PGP SIGNED MESSAGE-----
 
-Monday, July 12, 1999
+Wednesday, September 1, 1999
 
-THIS IS BETA CODE.
+THIS IS BETA CODE.  BUT NOT FOR LONG.
 
 Please read this README.  Mac::Glue is not self-explanatory.  Some
 assembly is required.
@@ -11,6 +11,7 @@ assembly is required.
 WHAT THIS IS
 - ------------
 
+Mac::Glue 0.51.
 It is an architecture for using Apple event terminology in MacPerl.
 It is cool.
 It is in beta.  Yay!
@@ -19,7 +20,7 @@ It is in beta.  Yay!
 GETTING STARTED
 - ---------------
 
-You need the latest cpan-mac installed.  It is cpan-mac 0.32,
+You need the latest cpan-mac installed.  It is cpan-mac 0.35,
 and available at:
 
     http://www.perl.com/CPAN-local/authors/id/CNANDOR/
@@ -27,12 +28,6 @@ and available at:
 Read the cpan-mac README for more information on it.  It contains
 all the modules you will need to use Mac::Glue (including
 some other really cool stuff).
-
-If you have installed the previous Mac::Glue distribution
-from 990622 SINCE installing cpan-mac 0.32, you will need to
-reinstall cpan-mac 0.32, as Mac::Glue 990622 probably overwrote
-newer versions with older versions of some modules.  That's life
-using alpha code!  :D
 
 Make sure in your Preferences, set site_perl as a libraries
 path (so it will come before your main MacPerl lib directory).
@@ -70,9 +65,9 @@ Chris Nandor          mailto:pudge@pobox.com         http://pudge.net/
 Version: PGPfreeware 6.0.2i for non-commercial use
 Comment: Bwahahahaha!
 
-iQCVAwUBN4pUWChcZja3bnKtAQGR5AQAs1RjHbaE4dp9nHd+UC9lbtcZ0cP7st0I
-xQsqLkEIRuSLeOv9TWvqlfY3q/BPiZvbtfJVO/Kl4nLs5g4a+2MzH61AwQ+QrjFT
-qCryLkQyM3FYE60WsV/wh4ElZd9OCuJWtCXGOUHWP8Txu7O50e1KGcBWWeR2SzUp
-RBnqFDSaFv0=
-=g1dU
+iQCVAwUBN82t9ChcZja3bnKtAQHl1QQAi1SYfKB/aDWIx8ByCodfnBR1FjkwDv+S
+MYuoZ9cA9EbZsEZfA7kylHgI5gdm/HzfiE1O/dCAHdgHKnV+vj/Xnp5tCDoHCX5d
+lge9o2o/lf3ULZonqFbyeRbaB9R1fIoFNUCrVuu3lip0lstRjVcog6vbGVdmy7l/
+AOOn8DgLKz8=
+=ixHm
 -----END PGP SIGNATURE-----

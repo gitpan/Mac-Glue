@@ -1,4 +1,4 @@
-package Dictionary;
+package Mac::AETE::Format::Dictionary;
 
 
 sub new {

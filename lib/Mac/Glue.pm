@@ -17,7 +17,7 @@ use Exporter;
 use Fcntl;
 use Mac::AppleEvents 1.22 ();
 use Mac::Memory 1.20 ();
-use Mac::AppleEvents::Simple 0.71 ':all';
+use Mac::AppleEvents::Simple 0.72 ':all';
 use Mac::Apps::Launch 1.70;
 use Mac::Files;
 use Mac::Types;
@@ -34,7 +34,7 @@ use vars qw(
 
 #=============================================================================#
 
-$VERSION            = '0.50';
+$VERSION            = '0.51';
 @ISA                = 'Exporter';
 @EXPORT             = ();
 @SYMS               = qw(
@@ -61,7 +61,7 @@ $GENSEQ             = 0;
 
 # change this if it ever works on other platforms ... Mac OS X?
 $ENV{MACGLUEDIR}    ||= "$ENV{MACPERL}site_perl:Mac:Glue:glues:";
-$ENV{MACGLUEDIR}    .= ':' unless substr($ENV{MACGLUEDIR}, -1, 1) eq ':';
+$ENV{MACGLUEDIR}    .= ':' unless $ENV{MACGLUEDIR} =~ /:$/;
 
 _open_others();
 
@@ -638,14 +638,14 @@ sub _find_event {
     my($self, $name) = @_;
     my $event;
 
-    for (@OTHEREVENT, $self->{_DB}{EVENT}) {
+    return $SPECIALEVENT{$name} if exists $SPECIALEVENT{$name};
+
+    for ($self->{_DB}{EVENT}, @OTHEREVENT) {
         if (exists $_->{$name}) {
             $event = $_->{$name};
             last;
         }
     }
-
-    $event ||= $SPECIALEVENT{$name} if exists $SPECIALEVENT{$name};
 
     return $event;
 }
@@ -975,7 +975,7 @@ So the vision was born for a framework that wouldn't take much
 significant work.  An application's AETE resource would provide the
 names to match to the cryptic four-character codes we had been using. 
 Compare.
-    
+
 =over 4
 
 =item Raw Mac::AppleEvents method
@@ -1452,7 +1452,7 @@ Nothing is exported by default.
 
 =over 4
 
-=item Add names to glue docus (for things like inheritance),
+=item Add names to glue docs (for things like inheritance),
 replacing four-digit codes where appropriate
 
 =item Alternate methods of specifying target app (PSN, etc.)
@@ -1480,12 +1480,24 @@ itself
 
 =item Handlers?
 
+=item Put proper aete names in returned records
+
+=item Add dynamic fetching of glues
+
 =back
 
 
 =head1 HISTORY
 
 =over 4
+
+=item v0.51, Wednesday, September 1, 1999
+
+Changed ordering of search in C<_find_event>.
+
+Fixed doc problems in Mac::AETE::Format::Glue: inheritance
+classes are named, and optional parameters are properly
+denoted.
 
 =item v0.50, 12 July 1999
 
@@ -1672,4 +1684,4 @@ Interapplication Communication.
 
 =head1 VERSION
 
-0.50, 12 July 1999
+0.51, Wednesday, September 1, 1999
