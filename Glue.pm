@@ -1,5 +1,9 @@
 package Mac::Glue;
 
+# the code below is SCARY.  please consider your loved ones before
+# venturing within.  it might seem reasonable at first, but then you
+# get sucked in and it's all over.
+
 BEGIN {
 	use vars qw($SERIALIZER);
 	$SERIALIZER =
@@ -7,11 +11,10 @@ BEGIN {
 			'Storable' :
 		$MacPerl::Architecture eq 'MacCFM68K' ?
 			'FreezeThaw' :
-		croak("Must be using CFM68K or PPC build of MacPerl: $MacPerl::Architecture");
+		die("Must be using CFM68K or PPC build of MacPerl: $MacPerl::Architecture");
 
 }
 
-use AutoLoader;
 use Carp;
 use Data::Dumper;
 use Exporter;
@@ -28,25 +31,27 @@ use strict;
 use vars qw(
 	$REVISION $VERSION $AUTOLOAD %AE_PUT %AE_GET @SYMS @METHS
 	@EXPORT @EXPORT_OK %EXPORT_TAGS @ISA $GLUEDIR
-	$GENPKG $GENSEQ %OPENGLUES %MERGEDCLASSES @OTHEREVENT
-	@OTHERCLASS %SPECIALEVENT %SPECIALCLASS %DESCS
-	%MERGEDENUM @OTHERENUM %INSL %DESC_TYPE %COMP %LOGI
+	$GENPKG $GENSEQ %OPENGLUES $MERGEDCLASSES $OTHEREVENT
+	$OTHERCLASS %SPECIALEVENT %SPECIALCLASS %DESCS
+	$MERGEDENUM $OTHERENUM %INSL %DESC_TYPE %COMP %LOGI
+	$RESERVED
 );
 
 #=============================================================================#
-
-$REVISION	= '$Id: Glue.pm,v 1.4 2000/09/15 00:20:56 pudge Exp $';
-$VERSION	= '1.00';
+# $Id: Glue.pm,v 1.5 2002/01/15 05:16:59 pudge Exp $
+($REVISION) 	= ' $Revision: 1.5 $ ' =~ /\$Revision:\s+([^\s]+)/;
+$VERSION	= '1.01';
 @ISA		= 'Exporter';
 @EXPORT		= ();
+$RESERVED	= 'REPLY|SWITCH|MODE|PRIORITY|TIMEOUT|RETOBJ|ERRORS|CALLBACK|CLBK_ARG';
 @SYMS		= qw(
-			param_type obj_form enum range whose location
-			glueTrue glueFalse glueNext gluePrevious
+			obj_form  param_type enum whose range location
+			glueTrue  glueFalse  glueNext gluePrevious
 			glueFirst glueMiddle glueLast glueAny glueAll
-			gTrue    gFalse    gNext    gPrevious
+			gTrue     gFalse     gNext    gPrevious
 			gFirst    gMiddle    gLast    gAny    gAll
 		);
-@METHS		= qw(	AUTOLOAD can launch obj prop	);
+@METHS		= qw(	ADDRESS AUTOLOAD can launch obj prop	);
 
 @EXPORT_OK	= ( @Mac::AppleEvents::EXPORT, @SYMS );
 %EXPORT_TAGS	= (
@@ -63,8 +68,72 @@ $GENSEQ		= 0;
 $ENV{MACGLUEDIR}	||= "$ENV{MACPERL}site_perl:Mac:Glue:glues:";
 $ENV{MACGLUEDIR}	.= ':' unless $ENV{MACGLUEDIR} =~ /:$/;
 
-_open_others();
+#=============================================================================#
+# exported functions
+sub obj_form ($$;$)	{ bless [@_], 'Mac::AEObjDescForm' }
+sub param_type ($$)	{ bless [@_], 'Mac::AEParamType' }
+sub enum ($)		{ bless [@_], 'Mac::AEEnum' }
+sub whose		{ bless [formTest, @_], 'Mac::AEObjDescType' }
+sub range ($$)		{ bless [formRange, @_], 'Mac::AEObjDescType' }
+sub location ($;$);	*location = *_do_loc{CODE};
 
+#=============================================================================#
+# constants
+use constant glueTrue		=> enum('true');
+use constant glueFalse		=> enum('false');
+
+use constant glueFirst		=> obj_form(formAbsolutePosition, typeAbsoluteOrdinal, kAEFirst);
+use constant glueMiddle		=> obj_form(formAbsolutePosition, typeAbsoluteOrdinal, kAEMiddle);
+use constant glueLast		=> obj_form(formAbsolutePosition, typeAbsoluteOrdinal, kAELast);
+use constant glueAny		=> obj_form(formAbsolutePosition, typeAbsoluteOrdinal, kAEAny);
+use constant glueAll		=> obj_form(formAbsolutePosition, typeAbsoluteOrdinal, kAEAll);
+use constant glueNext		=> obj_form(formRelativePosition, typeEnumerated, kAENext);
+use constant gluePrevious	=> obj_form(formRelativePosition, typeEnumerated, kAEPrevious);
+
+use constant glueNull		=> new AEDesc typeNull;
+
+use constant glueAnd		=> new AEDesc typeEnumerated, kAEAND;
+use constant glueOr		=> new AEDesc typeEnumerated, kAEOR;
+use constant glueNot		=> new AEDesc typeEnumerated, kAENOT;
+
+use constant glueGT		=> new AEDesc typeEnumerated, kAEGreaterThan;
+use constant glueGE		=> new AEDesc typeEnumerated, kAEGreaterThanEquals;
+use constant glueEquals		=> new AEDesc typeEnumerated, kAEEquals;
+use constant glueLT		=> new AEDesc typeEnumerated, kAELessThan;
+use constant glueLE		=> new AEDesc typeEnumerated, kAELessThanEquals;
+use constant glueBeginsWith	=> new AEDesc typeEnumerated, kAEBeginsWith;
+use constant glueEndsWith	=> new AEDesc typeEnumerated, kAEEndsWith;
+use constant glueContains	=> new AEDesc typeEnumerated, kAEContains;
+
+# short names
+use constant gTrue		=> glueTrue();
+use constant gFalse		=> glueFalse();
+
+use constant gFirst		=> glueFirst();
+use constant gMiddle		=> glueMiddle();
+use constant gLast		=> glueLast();
+use constant gAny		=> glueAny();
+use constant gAll		=> glueAll();
+use constant gNext		=> glueNext();
+use constant gPrevious		=> gluePrevious();
+
+use constant gNull		=> glueNull();
+
+use constant gAnd		=> glueAnd();
+use constant gOr		=> glueOr();
+use constant gNot		=> glueNot();
+
+use constant gGT		=> glueGT();
+use constant gGE		=> glueGE();
+use constant gEquals		=> glueEquals();
+use constant gLT		=> glueLT();
+use constant gLE		=> glueLE();
+use constant gBeginsWith	=> glueBeginsWith();
+use constant gEndsWith		=> glueEndsWith();
+use constant gContains		=> glueContains();
+
+#=============================================================================#
+_open_others();
 #=============================================================================#
 
 sub new {
@@ -89,39 +158,49 @@ sub new {
 	}
 	$db = $OPENGLUES{$glue};
 
-	# create new class to put this in, add the symbols we want
-	$class = $GENPKG . "::GLUE" . $GENSEQ++;
+	# create new class to put this in, add the symbols we want,
+	# nyah nyah nyah (gosh, I love Perl)
+	$class = $GENPKG . '::GLUE' . $GENSEQ++;
 	{
 		no strict 'refs';
 		for (@METHS) {
-			*{$class . "::$_"} = *{"Mac::Glue::$_"}{CODE};
+			*{$class . '::' . $_} = *{'Mac::Glue::' . $_}{CODE};
 		}
 	}
 
 	$self = { _DB => $db, ID => $db->{ID}, SWITCH => 0, GLUENAME => $app };
 
-	$self->{ADDRESS} = defined $addtype
-			? $addtype eq 'ppc'  || $addtype eq typeTargetID
-				? { typeTargetID() => pack_ppc($db->{ID}, @add) }
-
-			: $addtype eq 'eppc' || $addtype eq typeTargetID
-				? { typeTargetID() => pack_eppc($db->{ID}, @add) }
-
-			: $addtype eq 'psn'  || $addtype eq typeProcessSerialNumber
-				? { typeProcessSerialNumber() => pack_psn($add[0]) } 
-
-			: $addtype eq 'path'
-				? { typeProcessSerialNumber() => _path_to_psn($add[0]) }
-
-			: { $addtype => $add[0] }
-
-		: { typeApplSignature() => $self->{ID} };
+	ADDRESS($self, $addtype, @add);
 
 	@{$self}{qw(CLASS NAMES IDS)} = _merge_classes($db);
 	_merge_enums($db, $self);
 
 	bless($self, $class);
 }
+
+#=============================================================================#
+# set target address
+sub ADDRESS {
+	my($self, $addtype, @add) = @_;
+
+	$self->{ADDRESS} = defined $addtype
+		? $addtype eq 'ppc'	 || $addtype eq typeTargetID
+			? { typeTargetID() => pack_ppc($self->{ID}, @add) }
+
+		: $addtype eq 'eppc' || $addtype eq typeTargetID
+			? { typeTargetID() => pack_eppc($self->{ID}, @add) }
+
+		: $addtype eq 'psn'	 || $addtype eq typeProcessSerialNumber
+			? { typeProcessSerialNumber() => pack_psn($add[0]) } 
+
+		: $addtype eq 'path'
+			? { typeProcessSerialNumber() => _path_to_psn($add[0]) }
+
+		: { $addtype => $add[0] }
+
+	: { typeApplSignature() => $self->{ID} };
+}
+
 
 #=============================================================================#
 # help UNIVERSAL::can out
@@ -131,7 +210,7 @@ sub can {
 	return unless @_ == 2;
 	my $can = UNIVERSAL::can($self, $meth);
 	unless ($can) {
-		$AUTOLOAD = ref($self) . "::$meth";
+		$AUTOLOAD = ref($self) . '::' . $meth;
 		$can = AUTOLOAD('AUTOLOAD::can', $self);
 	}
 	return $can;
@@ -146,21 +225,26 @@ sub AUTOLOAD {
 	(my $name = $AUTOLOAD) =~ s/^.*://;
 	my $sub;
 
+	# catch reserved "method" names
 	if ($name eq 'DESTROY') {
 		return;
-	} elsif ($name =~ /^(?:REPLY|SWITCH|MODE|PRIORITY|TIMEOUT|RETOBJ|ERRORS)$/) {
+	} elsif ($name =~ /^(?:$RESERVED)$/) {
 		$sub = sub { $_[0]->{$name} = $_[1] if $_[1]; $_[0]->{$name} };
 	}
 
+	# catch other-case versions of already-installed methods
 	unless ($sub) {
 		(my $auto = $AUTOLOAD) =~ s/:([^:]+)$/:\L$1/;
 		$sub = $auto if defined &$auto;
 	}
 
+	# define method if we can find it in the glue table
 	unless ($sub) {
 		if (my $event = _find_event($self, lc $name)) {
 			$sub = sub { _primary($_[0], $event, lc $name, @_[1 .. $#_]) }
 		} elsif (! $can) {
+			# should this croak?  probably.  complain and come
+			# up with another idea if you don't like it.
 			croak "No event '$name' available from glue for '$self->{GLUENAME}'";
 		}
 	}
@@ -178,6 +262,8 @@ sub AUTOLOAD {
 #=============================================================================#
 # login using GTQ Login As OSAX
 # will NOT return error if exists, because MacPerl does not handle replies well
+
+# this should be removed, it is a bad idea.
 
 sub login {
 	my($self, $user, $pass) = @_;
@@ -222,7 +308,7 @@ sub _primary {
 	my $hash = {@args};
 	if ($hash) {
 		for my $p (keys %$hash) {
-			next if $p =~ /^(?:REPLY|SWITCH|MODE|PRIORITY|TIMEOUT|RETOBJ|ERRORS|CALLBACK|CLBK_ARG)$/;
+			next if $p =~ /^(?:$RESERVED)$/;
 			my $pp = $p eq 'DOBJ' ? keyDirectObject : lc $p;
 			croak "'$p' parameter not available" unless exists $params->{$pp};
 			_params($self, $evt, $params->{$pp}, $hash->{$p});
@@ -285,7 +371,17 @@ sub _primary {
 			? $self->{ERRORS}
 			: 0;
 
-	local $AE_GET{typeObjectSpecifier()} = sub { (_obj_desc($self, $_[0]), 1) };
+	local $AE_GET{typeObjectSpecifier()} = sub {
+		return(_obj_desc($self, $_[0]), 1);
+	};
+
+	local $Mac::AppleEvents::Simple::CLASSREC = sub {
+		return _is_class($self, $_[0]);
+	};
+
+	local $Mac::AppleEvents::Simple::ENUMREC = sub {
+		return _is_enum($self, $_[0]);
+	};
 
 	my @return;
 	if ($retobj) {
@@ -301,9 +397,20 @@ sub _primary {
 	my $return = 1;
 	# if error handler, only return if error handler returns true
 	# what should error handler be passed?
-	$return = $error_handler->($self, $evt, $self->{GLUENAME},
-		$name, $^E, $^E+0, @origargs
-	) if $^E && $error_handler;
+	if ($^E && $error_handler) {
+		my($package, $filename, $line) = caller(1);
+		$return = $error_handler->({
+			_glue		=> $self,
+			_event		=> $evt,
+			glue		=> $self->{GLUENAME},
+			event		=> $name,
+			errs		=> $^E,
+			errn		=> $^E+0,
+			line		=> $line,
+			'package'	=> $package,
+			filename	=> $filename,
+		}, @origargs);
+	}
 
 	return(wantarray ? @return : $return[0]) if $return;
 }
@@ -440,6 +547,8 @@ sub _do_obj {
 	}
 
 	# type / keyAEContainer
+	# hm.  why are first two the same?  why didn't i comment this to
+	# begin with?
 	if ($from && $from eq typeCurrentContainer) {
 		AEPutKey($list, keyAEContainer, $from, '')
 			or confess "Can't put from:$from into object: $^E";
@@ -703,6 +812,29 @@ sub _get_name {
 }
 
 #=============================================================================#
+# find if ID is class
+
+sub _is_class {
+	my($self, $id) = @_;
+	my $name = _get_name($self, $id) or return;
+	my $class = $self->{CLASS}{$name} or return;
+	if (scalar keys %{$class->{properties}} > 1 ||
+		(scalar keys %{$class->{properties}} == 1 && ! exists $class->{properties}{''})) {
+#		print Dumper $class->{properties};
+		return 1;
+	}
+}
+
+#=============================================================================#
+# return name if type is enum
+
+sub _is_enum {
+	my($self, $id) = @_;
+	return unless exists $self->{ENUM}{$id};
+	return _get_name($self, $id);
+}
+
+#=============================================================================#
 # fix record stuff
 
 sub _fix_reco {
@@ -754,7 +886,7 @@ sub _get_objdesc {
 
 sub _obj_desc {
 	_save_desc($_[1]);
-	my $self = bless {GLUE => $_[0], DESC => $_[1]}, 'Mac::AEObjDesc';
+	my $self = bless { GLUE => $_[0], DESC => $_[1] }, 'Mac::AEObjDesc';
 }
 
 #=============================================================================#
@@ -771,7 +903,7 @@ sub _find_event {
 
 	return $SPECIALEVENT{$name} if exists $SPECIALEVENT{$name};
 
-	for ($self->{_DB}{EVENT}, @OTHEREVENT) {
+	for ($self->{_DB}{EVENT}, @$OTHEREVENT) {
 		if (exists $_->{$name}) {
 			$event = $_->{$name};
 			last;
@@ -795,15 +927,17 @@ sub _is_plural {
 #=============================================================================#
 # create an AE object
 
+# heh heh heh ... stupid little shortcut
 sub prop {
 	@_ = ($_[0], 'property', @_[1 .. $#_]);
 	goto &obj;
 }
 
+# this is pretty nasty, just go with it
 sub obj {
 	my($self, @data, $obj, @obj) = @_;
 
-	if (ref($data[-1]) =~ /^(Mac::)?AE(?:Obj)?Desc$/) { # @data % 2 && 
+	if (ref($data[-1]) =~ /^(Mac::)?AE(?:Obj)?Desc$/) {
 		$obj = pop @data;
 	}
 
@@ -833,22 +967,6 @@ sub obj {
 }
 
 #=============================================================================#
-# exported functions
-
-sub enum ($)		{ bless [@_], 'Mac::AEEnum' }
-
-sub obj_form ($$;$)	{ bless [@_], 'Mac::AEObjDescForm' }
-
-sub param_type ($$)	{ bless [@_], 'Mac::AEParamType' }
-
-sub whose		{ bless [formTest, @_], 'Mac::AEObjDescType' }
-
-sub range ($$)		{ bless [formRange, @_], 'Mac::AEObjDescType' }
-
-sub location ($;$);
-*location = *_do_loc{CODE};
-
-#=============================================================================#
 # launch the app (done automatically when an event is called if not running)
 
 sub launch {
@@ -864,7 +982,7 @@ sub launch {
 # launch spec and then get PSN
 
 sub _path_to_psn {
-	my $path = shift;
+	my($path) = @_;
 
 	confess "Path '$path' does not exist" unless -e $path;
 
@@ -896,27 +1014,42 @@ sub _open_others {
 		opendir DIR, $dir or confess "Can't open directory '$dir': $!";
 		chdir $dir or confess "Can't chdir directory '$dir': $!";
 
-		# ### add file type / creator checking
+		# add file type / creator checking ???
+		# maybe add a new file type for glues?  i can do that now,
+		# because i am special or something.
 		for (readdir DIR) {
+			next if $_ eq "Icon\015";
 			next if /\.pod$/;
-			next if $_ eq "Icon\n";
 			tie my %db, 'MLDBM', $_, O_RDONLY or confess "Can't tie '$_': $!";
-			push @OTHEREVENT, $db{EVENT};
-			push @OTHERCLASS, $db{CLASS};
-			push @OTHERENUM, $db{ENUM};
+			push @$OTHEREVENT, $db{EVENT} if $db{EVENT};
+			push @$OTHERCLASS, $db{CLASS} if $db{CLASS};
+			push @$OTHERENUM,  $db{ENUM}  if $db{ENUM};
 		}
 	}
 	chdir $curdir or confess "Can't chdir to '$curdir': $!";
+
+# would this even help anything?  BAH!
+# 	tie my %merged, 'MLDBM', "$ENV{MACGLUEDIR}gluemergecache", O_RDWR or confess "Can't tie '$_': $!";
+# 	if ($merged{EVENT} ne "@$OTHEREVENT" || $merged{CLASS} ne "@$OTHERCLASS" || $merged{ENUM} ne "@$OTHERENUM") {
+# 		$MERGEDCLASSES	= $merged{CLASSES} = {};
+# 		$MERGEDENUM	= $merged{ENUM} = {};
+# 	} else {
+# 		$MERGEDCLASSES	= $merged{CLASSES};
+# 		$MERGEDENUM	= $merged{ENUM};
+# 	}
 }
 
 #=============================================================================#
 # merge additions, dialect, and glue classes together
+# wow, this is ugly.  i wonder if there is a better/faster way.  probably.
+# or maybe a way to cache the results between iterations ... ?
+# but then, how do we deal with added/removed classes?
 
 sub _merge_classes {
 	my($db) = @_;
-	if (!exists $MERGEDCLASSES{ $db->{ID} }) {
+	if (!exists $MERGEDCLASSES->{ $db->{ID} }) {
 		my($ids, $names) = ({}, {});
-		my($class, @classes) = ($db->{CLASS}, @OTHERCLASS);
+		my($class, @classes) = ($db->{CLASS}, @$OTHERCLASS);
 
 		for my $c (keys %$class) {
 			$names->{$c}{id} = $class->{$c}{id};
@@ -951,39 +1084,36 @@ sub _merge_classes {
 			}
 		}
 
-		$MERGEDCLASSES{ $db->{ID} } = [$class, $names, $ids];
+		$MERGEDCLASSES->{ $db->{ID} } = [$class, $names, $ids];
 	}
-	return @{$MERGEDCLASSES{ $db->{ID} }};
+	return @{$MERGEDCLASSES->{ $db->{ID} }};
 }
 
 #=============================================================================#
 # "merge" additions, dialect, and glue enumerations together
+# see above about caching results, rethinking logic.  for a really
+# really really really rainy day.
 
 sub _merge_enums {
 	my($db, $self) = @_;
-	if (!exists $MERGEDENUM{ $db->{ID} }) {
+	if (!exists $MERGEDENUM->{ $db->{ID} }) {
 		my $names = $self->{NAMES};
 		my $ids = $self->{IDS};
-		my($class, @classes) = ($db->{ENUM}, @OTHERENUM);
 
-		for my $c (keys %$class) {
-			for my $n (keys %{$class->{$c}}) {
-				$names->{$n}{id} ||= $class->{$c}{$n}{id};
-				$ids->{$names->{$n}{id}} ||= $n;
-			}
-		}
-
-		for my $tempc (@classes) {
+		for my $tempc (grep defined, $db->{ENUM}, @$OTHERENUM) {
 			for my $c (keys %$tempc) {
+				$self->{ENUMTYPE}{$c} = [];
 				for my $n (keys %{$tempc->{$c}}) {
 					$names->{$n}{id} ||= $tempc->{$c}{$n}{id};
-					$ids->{$names->{$n}{id}} ||= $n;
+					$ids->{$names->{$n}{id}} ||= { name => $n };
+					$self->{ENUM}{$tempc->{$c}{$n}{id}} = 1;
+					push @{$self->{ENUMTYPE}{$c}}, $tempc->{$c}{$n}{id};
 				}
 			}
 		}
-		$MERGEDENUM{ $db->{ID} }++;
+		$MERGEDENUM->{ $db->{ID} }++;
 	}
-	$MERGEDENUM{ $db->{ID} };
+	$MERGEDENUM->{ $db->{ID} };
 }
 
 #=============================================================================#
@@ -1072,62 +1202,8 @@ sub _merge_enums {
 
 #=============================================================================#
 # other glue* stuff
-
-use constant glueTrue		=> enum('true');
-use constant glueFalse		=> enum('false');
-
-use constant glueFirst		=> obj_form(formAbsolutePosition, typeAbsoluteOrdinal, kAEFirst);
-use constant glueMiddle		=> obj_form(formAbsolutePosition, typeAbsoluteOrdinal, kAEMiddle);
-use constant glueLast		=> obj_form(formAbsolutePosition, typeAbsoluteOrdinal, kAELast);
-use constant glueAny		=> obj_form(formAbsolutePosition, typeAbsoluteOrdinal, kAEAny);
-use constant glueAll		=> obj_form(formAbsolutePosition, typeAbsoluteOrdinal, kAEAll);
-use constant glueNext		=> obj_form(formRelativePosition, typeEnumerated, kAENext);
-use constant gluePrevious	=> obj_form(formRelativePosition, typeEnumerated, kAEPrevious);
-
-use constant glueNull		=> new AEDesc typeNull;
-
-use constant glueAnd		=> new AEDesc typeEnumerated, kAEAND;
-use constant glueOr		=> new AEDesc typeEnumerated, kAEOR;
-use constant glueNot		=> new AEDesc typeEnumerated, kAENOT;
-
-use constant glueGT		=> new AEDesc typeEnumerated, kAEGreaterThan;
-use constant glueGE		=> new AEDesc typeEnumerated, kAEGreaterThanEquals;
-use constant glueEquals		=> new AEDesc typeEnumerated, kAEEquals;
-use constant glueLT		=> new AEDesc typeEnumerated, kAELessThan;
-use constant glueLE		=> new AEDesc typeEnumerated, kAELessThanEquals;
-use constant glueBeginsWith	=> new AEDesc typeEnumerated, kAEBeginsWith;
-use constant glueEndsWith	=> new AEDesc typeEnumerated, kAEEndsWith;
-use constant glueContains	=> new AEDesc typeEnumerated, kAEContains;
-
-
-use constant gTrue		=> glueTrue();
-use constant gFalse		=> glueFalse();
-
-use constant gFirst		=> glueFirst();
-use constant gMiddle		=> glueMiddle();
-use constant gLast		=> glueLast();
-use constant gAny		=> glueAny();
-use constant gAll		=> glueAll();
-use constant gNext		=> glueNext();
-use constant gPrevious		=> gluePrevious();
-
-use constant gNull		=> glueNull();
-
-use constant gAnd		=> glueAnd();
-use constant gOr		=> glueOr();
-use constant gNot		=> glueNot();
-
-use constant gGT		=> glueGT();
-use constant gGE		=> glueGE();
-use constant gEquals		=> glueEquals();
-use constant gLT		=> glueLT();
-use constant gLE		=> glueLE();
-use constant gBeginsWith	=> glueBeginsWith();
-use constant gEndsWith		=> glueEndsWith();
-use constant gContains		=> glueContains();
-
-for (gNull(), gAnd(), gOr(), gNot(), gGT(), gGE(),
-	gEquals(), gLT(), gLE(), gBeginsWith(), gEndsWith(), gContains()) {
+for (gNull(), gAnd(), gOr(), gNot(), gGT(), gGE(), gEquals(),
+	gLT(), gLE(), gBeginsWith(), gEndsWith(), gContains()) {
 	_save_desc($_);   
 }
 
@@ -1149,6 +1225,8 @@ Mac::Glue - Control Mac apps with Apple event terminology
 	# see rest of docs for lots more info
 
 =head1 DESCRIPTION
+
+"Mac::Glue does AppleScript so you don't have to."
 
 You should have the latest cpan-mac distribution:
 
@@ -1292,6 +1370,10 @@ New for Mac OS 9, you can send events over TCP/IP:
 	my $glue = Mac::Glue->new('My App', eppc => 'My App Name',
 		'some.machine.com');
 
+Also, the address can be changed after the fact:
+
+	my $glue = Mac::Glue->new('My App');
+	$glue->ADDRESS(eppc => 'My App Name', 'some.machine.com');
 
 Once you have your glue set up, you start calling events, as they are
 documented in the POD file for the glue.  The events can be called
@@ -1338,7 +1420,7 @@ You can override this behavior with the C<param_type> function.  If
 C<open> expects an alias (C<typeAlias>), but you want to pass text,
 you can do:
 
-	$glue->open( param_type($path, typeChar) );
+	$glue->open( param_type(typeChar, $path) );
 
 Each datum can be a simple scalar as above, an AEDesc object,
 an Mac::AEObjDesc object (returned by C<obj>, C<prop>, and event methods),
@@ -1804,7 +1886,7 @@ wanted on this, let me know what I missed)
 
 =item *
 
-Add comparison operators from glues
+Add comparison operators from glues ?
 
 =item *
 
@@ -1832,7 +1914,12 @@ itself
 
 =item *
 
-Handlers?
+Handlers (on foo ...) ?
+
+=item *
+
+Callbacks (some support exists, Cameron Ashby E<lt>cameron@evolution.comE<gt>,
+see Mac::AppleEvents::Simple) ?
 
 =item *
 
@@ -1844,6 +1931,19 @@ Add dynamic fetching of glues?
 =head1 HISTORY
 
 =over 4
+
+=item v1.01, Tuesday, January 15, 2002
+
+Clean up a bit for 5.6.
+
+Add ADDRESS method.
+
+Add checking for enumerators and classes.
+
+Make error handler work as hashref parameter list.
+
+Change license to be that of Perl.
+
 
 =item v1.00, Tuesday, September 12, 2000
 
@@ -2063,20 +2163,21 @@ Whole bunches of changes.  Note that glues made under 0.05 no longer work.
 
 Chris Nandor E<lt>pudge@pobox.comE<gt>, http://pudge.net/
 
-Copyright (c) 1998-2000 Chris Nandor.  All rights reserved.  This program
-is free software; you can redistribute it and/or modify it under the terms
-of the Artistic License, distributed with Perl.
+Copyright (c) 1998-2002 Chris Nandor.  All rights reserved.  This program
+is free software; you can redistribute it and/or modify it under the same
+terms as Perl itself.
 
 
 =head1 THANKS
 
-Matthias Neeracher E<lt>neeri@iis.ee.ethz.chE<gt>,
+Matthias Neeracher E<lt>neeracher@mac.comE<gt>,
 David Schooley E<lt>dcschooley@mediaone.netE<gt>,
 Graham Barr E<lt>gbarr@pobox.comE<gt>,
 John W Baxter E<lt>jwblist@olympus.netE<gt>,
 Marion Delgado E<lt>dhp@efn.orgE<gt>,
 Eric Dobbs E<lt>dobbs@visionlink.orgE<gt>,
 Josh Gemmell E<lt>joshg@ola.bc.caE<gt>,
+Alex Harper E<lt>harper@misanthrope.netE<gt>,
 Nathaniel Irons E<lt>irons@espresso.hampshire.eduE<gt>,
 Dave Johnson E<lt>dave_johnson@ieee.orgE<gt>,
 Bart Lateur E<lt>bart.mediamind@ping.beE<gt>,
@@ -2101,11 +2202,11 @@ Matthew Wickline E<lt>mattheww@wickline.orgE<gt>.
 Mac::AppleEvents, Mac::AppleEvents::Simple, macperlcat, Inside Macintosh: 
 Interapplication Communication.
 
-	http://sourceforge.net/projects/mac-glue/
+	http://sf.net/projects/mac-glue/
 
 =cut
 
 
 =head1 VERSION
 
-v1.00, Tuesday, September 12, 2000
+v1.01, Tuesday, January 15, 2002

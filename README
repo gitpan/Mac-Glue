@@ -1,57 +1,44 @@
-Tuesday, September 12, 2000
+This is Mac::Glue, for using Apple events with AppleScript vocabulary.
 
-This is Mac::Glue, version 1.00.  It can always be obtained from the
-following locations:
+See HISTORY in the POD for changes.
 
-	http://sourceforge.net/projects/mac-glue/
-	http://www.cpan.org/modules/by-module/Mac/
-	http://www.cpan.org/authors/id/CNANDOR/
-	http://pudge.net/macperl/
+This archive can always be obtained from:
 
-The file is a tarred, gzipped file.  Use Stuffit Expander or a
-similar program (like untargzipme, in the cpan-mac distribution)
-to get at the archive.
-
-Feedback, patches, bug reports, mailing lists, CVS, etc. are all
-available at the above SourceForge URL.
-
+    http://sf.net/projects/mac-glue/
+    http://www.cpan.org/authors/id/CNANDOR/
 
 Please read this README and the POD documentation.  Mac::Glue is not
-self-explanatory.  Some assembly is required.
-
-
-WHAT THIS IS
-------------
-
-Mac::Glue 1.00.
-A MacPerl extension for using Apple events with AppleScript vocabulary.
-Cool.
+self-explanatory.  Some assembly is required.  Mac::Glue comes with
+MacPerl 5.6.1 and later.
 
 
 GETTING STARTED, PART ONE
 -------------------------
 
-You need the latest cpan-mac installed.  It is cpan-mac 0.41,
-and available at:
+If not using MacPerl 5.6.1 or greater, the cpan-mac distribution (or
+the equivalent) is required.  It is available at:
 
-    http://www.perl.com/CPAN-local/authors/id/CNANDOR/
+    http://sf.net/projects/cpan-mac/
+    http://www.cpan.org/authors/id/CNANDOR/
 
 Read the cpan-mac README for more information on it.  It contains
 all the modules you will need to use Mac::Glue (including
 some other really cool stuff), most notably Mac::AppleEvents::Simple
-1.00 and some updated versions of other Mac:: modules.
+and some updated versions of other Mac:: modules.
 
 ************************************************************************
 Make sure that in your MacPerl Preferences you set site_perl as a
 Libraries path (so it will come before your main MacPerl lib directory).
+This is not necessary for MacPerl 5.6.1 and greater.
 ************************************************************************
 
 
 GETTING STARTED, PART TWO
 --------------------------
 
-Drop the Mac-Glue archive, or the unpacked folder, on the
-installme droplet that came with cpan-mac.
+If the module is not already installed, drop the Mac-Glue archive, or
+the unpacked folder, on the installme droplet that came with cpan-mac
+(or with MacPerl itself).
 
 After installing, you need to run the gluedialect program and then the
 gluescriptadds program.  These can be run just by double-clicking.
@@ -73,6 +60,14 @@ for the examples in ex/.
 
 Please play and read the notes and feed back to the lists, bug reporting,
 patch manager, or forums on SourceForge.
+
+
+Please let me know how well it does(n't) work, and any changes you'd 
+like to see.
+
+Copyright (c) 1998-2002 Chris Nandor.  All rights reserved.  This program
+is free software; you can redistribute it and/or modify it under the same
+terms as Perl itself.
 
 -- 
 Chris Nandor                      pudge@pobox.com    http://pudge.net/
