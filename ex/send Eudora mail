@@ -2,7 +2,7 @@
 use Mac::Glue ':glue';
 use strict;
 
-my $e = new Mac::Glue 'Eudora Pro';
+my $e = new Mac::Glue 'Eudora';
 my $box = $e->obj(mailbox => 'Out');
 $e->activate;
 

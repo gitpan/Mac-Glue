@@ -1,44 +1,50 @@
-Tuesday, November 16, 1999
+Tuesday, September 12, 2000
 
-THIS IS BETA CODE.  BUT NOT FOR LONG.
+This is Mac::Glue, version 1.00.  It can always be obtained from the
+following locations:
 
-Please read this README.  Mac::Glue is not self-explanatory.  Some
-assembly is required.
+	http://sourceforge.net/projects/mac-glue/
+	http://www.cpan.org/modules/by-module/Mac/
+	http://www.cpan.org/authors/id/CNANDOR/
+	http://pudge.net/macperl/
+
+The file is a tarred, gzipped file.  Use Stuffit Expander or a
+similar program (like untargzipme, in the cpan-mac distribution)
+to get at the archive.
+
+Feedback, patches, bug reports, mailing lists, CVS, etc. are all
+available at the above SourceForge URL.
+
+
+Please read this README and the POD documentation.  Mac::Glue is not
+self-explanatory.  Some assembly is required.
 
 
 WHAT THIS IS
 ------------
 
-Mac::Glue 0.57.
-It is an architecture for using Apple event terminology in MacPerl.
-It is cool.
-It is in beta.  Yay!
+Mac::Glue 1.00.
+A MacPerl extension for using Apple events with AppleScript vocabulary.
+Cool.
 
 
 GETTING STARTED, PART ONE
 -------------------------
 
-You need the latest cpan-mac installed.  It is cpan-mac 0.40,
+You need the latest cpan-mac installed.  It is cpan-mac 0.41,
 and available at:
 
     http://www.perl.com/CPAN-local/authors/id/CNANDOR/
 
 Read the cpan-mac README for more information on it.  It contains
 all the modules you will need to use Mac::Glue (including
-some other really cool stuff).
+some other really cool stuff), most notably Mac::AppleEvents::Simple
+1.00 and some updated versions of other Mac:: modules.
 
 ************************************************************************
 Make sure that in your MacPerl Preferences you set site_perl as a
 Libraries path (so it will come before your main MacPerl lib directory).
 ************************************************************************
-
-You should also download the latest Mac::AppleEvents::Simple, which is
-currently version 0.81.
-
-NOTE: This distribution contains Mac::Processes 1.01, for launching apps
-by their path and getting the right Process Serial Number. The module
-will be included in a future cpan-mac distribution, and then a future
-MacPerl distribution.
 
 
 GETTING STARTED, PART TWO
@@ -54,7 +60,7 @@ Then, for each application you want to script, drop it on the gluemac
 droplet.  Applications should not be running, in general, when dropped
 on the droplet (though in some cases it will work anyway, and in some
 cases the droplet will launch the application for you to get the
-needed information).  First program you should drop on the droplet is
+needed information).  The first program you should drop on the droplet is
 probably the Finder.  For each example script in this distribution you
 want to try, run the applications through the droplet first.
 
@@ -65,10 +71,9 @@ PLAYING
 Read the history in Mac:Glue.pm for what's changed, and read the code
 for the examples in ex/.
 
-Please play and read the notes and feed back to macperl-modules (see
-http://www.macperl.org/ for more details).  Feel free to send any
-feedback, including patches, to the list.
+Please play and read the notes and feed back to the lists, bug reporting,
+patch manager, or forums on SourceForge.
 
 -- 
-Chris Nandor          mailto:pudge@pobox.com         http://pudge.net/
-%PGPKey = ('B76E72AD', [1024, '0824090B CE73CA10  1FF77F13 8180B6B6'])
+Chris Nandor                      pudge@pobox.com    http://pudge.net/
+Open Source Development Network    pudge@osdn.com     http://osdn.com/

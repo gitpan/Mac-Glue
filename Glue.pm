@@ -1,13 +1,14 @@
 package Mac::Glue;
 
 BEGIN {
-    use vars qw($SERIALIZER);
-    $SERIALIZER =
-        $MacPerl::Architecture eq 'MacPPC' ?
-            'Storable' :
-        $MacPerl::Architecture eq 'MacCFM68K' ?
-            'FreezeThaw' :
-            croak('Must be using CFM68K or PPC build of MacPerl');
+	use vars qw($SERIALIZER);
+	$SERIALIZER =
+		$MacPerl::Architecture eq 'MacPPC' ?
+			'Storable' :
+		$MacPerl::Architecture eq 'MacCFM68K' ?
+			'FreezeThaw' :
+		croak("Must be using CFM68K or PPC build of MacPerl: $MacPerl::Architecture");
+
 }
 
 use AutoLoader;
@@ -15,165 +16,163 @@ use Carp;
 use Data::Dumper;
 use Exporter;
 use Fcntl;
-use Mac::AppleEvents 1.22 ();
-use Mac::Memory 1.20 ();
-use Mac::AppleEvents::Simple 0.80 ':all';
+use Mac::AppleEvents::Simple 1.00 ':all';
 use Mac::Apps::Launch 1.70;
 use Mac::Files;
-use Mac::Types;
+use Mac::Memory 1.20 ();
 use Mac::Processes 1.01;
+use Mac::Types;
 use MLDBM ('DB_File', $SERIALIZER);
 
 use strict;
 use vars qw(
-    $VERSION $AUTOLOAD %AE_PUT %AE_GET @SYMS @METHS
-    @EXPORT @EXPORT_OK %EXPORT_TAGS @ISA $GLUEDIR
-    $GENPKG $GENSEQ %OPENGLUES %MERGEDCLASSES @OTHEREVENT
-    @OTHERCLASS %SPECIALEVENT %SPECIALCLASS %DESCS
-    %MERGEDENUM @OTHERENUM %INSL %DESC_TYPE %COMP %LOGI
+	$REVISION $VERSION $AUTOLOAD %AE_PUT %AE_GET @SYMS @METHS
+	@EXPORT @EXPORT_OK %EXPORT_TAGS @ISA $GLUEDIR
+	$GENPKG $GENSEQ %OPENGLUES %MERGEDCLASSES @OTHEREVENT
+	@OTHERCLASS %SPECIALEVENT %SPECIALCLASS %DESCS
+	%MERGEDENUM @OTHERENUM %INSL %DESC_TYPE %COMP %LOGI
 );
 
 #=============================================================================#
 
-$VERSION            = '0.58';
-@ISA                = 'Exporter';
-@EXPORT             = ();
-@SYMS               = qw(
-                        param_type obj_form enum range whose location
-                        glueTrue glueFalse glueNext gluePrevious
-                        glueFirst glueMiddle glueLast glueAny glueAll
-                        gTrue gFalse gNext gPrevious
-                        gFirst gMiddle gLast gAny gAll
-                      );
-@METHS              = qw(
-                        AUTOLOAD can launch obj prop
-                      );
+$REVISION	= '$Id: Glue.pm,v 1.4 2000/09/15 00:20:56 pudge Exp $';
+$VERSION	= '1.00';
+@ISA		= 'Exporter';
+@EXPORT		= ();
+@SYMS		= qw(
+			param_type obj_form enum range whose location
+			glueTrue glueFalse glueNext gluePrevious
+			glueFirst glueMiddle glueLast glueAny glueAll
+			gTrue    gFalse    gNext    gPrevious
+			gFirst    gMiddle    gLast    gAny    gAll
+		);
+@METHS		= qw(	AUTOLOAD can launch obj prop	);
 
-@EXPORT_OK          = ( @Mac::AppleEvents::EXPORT, @SYMS );
-%EXPORT_TAGS        = (
-                        all     => [@EXPORT, @EXPORT_OK],
-                        glue    => [@EXPORT, @SYMS],
-                        long    => [grep !/^g[A-Z]/, @EXPORT, @SYMS],
-                        longall => [grep !/^g[A-Z]/, @EXPORT, @EXPORT_OK],
-                      );
+@EXPORT_OK	= ( @Mac::AppleEvents::EXPORT, @SYMS );
+%EXPORT_TAGS	= (
+			all	=> [@EXPORT, @EXPORT_OK],
+			glue	=> [@EXPORT, @SYMS],
+			long	=> [grep !/^g[A-Z]/, @EXPORT, @SYMS],
+			longall	=> [grep !/^g[A-Z]/, @EXPORT, @EXPORT_OK],
+		);
 
-$GENPKG             = __PACKAGE__;
-$GENSEQ             = 0;
+$GENPKG		= __PACKAGE__;
+$GENSEQ		= 0;
 
 # change this if it ever works on other platforms ... Mac OS X?
-$ENV{MACGLUEDIR}    ||= "$ENV{MACPERL}site_perl:Mac:Glue:glues:";
-$ENV{MACGLUEDIR}    .= ':' unless $ENV{MACGLUEDIR} =~ /:$/;
+$ENV{MACGLUEDIR}	||= "$ENV{MACPERL}site_perl:Mac:Glue:glues:";
+$ENV{MACGLUEDIR}	.= ':' unless $ENV{MACGLUEDIR} =~ /:$/;
 
 _open_others();
 
 #=============================================================================#
 
 sub new {
-    my($class, $app, $addtype, @add) = @_;
-    my($self, $glue, $db, $app1, $app2);
+	my($class, $app, $addtype, @add) = @_;
+	my($self, $glue, $db, $app1, $app2);
 
-    # find glue, try a few different names just in case
-    ($app1 = $app) =~ tr/ /_/;
-    ($app2 = $app) =~ tr/_/ /;
-    for (map { "$ENV{MACGLUEDIR}$_" } $app, $app1, $app2) {
-        if (-e) {
-            $glue = $_;
-            last;
-        }
-    }
-    croak "No application glue for '$app' found in '$ENV{MACGLUEDIR}'" unless $glue;
+	# find glue, try a few different names just in case
+	($app1 = $app) =~ tr/ /_/;
+	($app2 = $app) =~ tr/_/ /;
+	for (map { "$ENV{MACGLUEDIR}$_" } $app, $app1, $app2) {
+		if (-e) {
+			$glue = $_;
+			last;
+		}
+	}
+	croak "No application glue for '$app' found in '$ENV{MACGLUEDIR}'" unless $glue;
 
-    # if not already opened, open and store reference to db
-    unless (exists $OPENGLUES{$glue}) {
-        tie my %db, 'MLDBM', $glue, O_RDONLY or confess "Can't tie '$glue': $!";
-        $OPENGLUES{$glue} = \%db;
-    }
-    $db = $OPENGLUES{$glue};
+	# if not already opened, open and store reference to db
+	unless (exists $OPENGLUES{$glue}) {
+		tie my %db, 'MLDBM', $glue, O_RDONLY or confess "Can't tie '$glue': $!";
+		$OPENGLUES{$glue} = \%db;
+	}
+	$db = $OPENGLUES{$glue};
 
-    # create new class to put this in, add the symbols we want
-    $class = $GENPKG . "::GLUE" . $GENSEQ++;
-    {
-        no strict 'refs';
-        for (@METHS) {
-            *{$class . "::$_"} = *{"Mac::Glue::$_"}{CODE};
-        }
-    }
+	# create new class to put this in, add the symbols we want
+	$class = $GENPKG . "::GLUE" . $GENSEQ++;
+	{
+		no strict 'refs';
+		for (@METHS) {
+			*{$class . "::$_"} = *{"Mac::Glue::$_"}{CODE};
+		}
+	}
 
-    $self = { _DB => $db, ID => $db->{ID}, SWITCH => 0, GLUENAME => $app };
+	$self = { _DB => $db, ID => $db->{ID}, SWITCH => 0, GLUENAME => $app };
 
-    $self->{ADDRESS} = defined $addtype
-            ? $addtype eq 'ppc'  || $addtype eq typeTargetID
-                ? { typeTargetID()            => pack_ppc($db->{ID}, @add) }
+	$self->{ADDRESS} = defined $addtype
+			? $addtype eq 'ppc'  || $addtype eq typeTargetID
+				? { typeTargetID() => pack_ppc($db->{ID}, @add) }
 
-            : $addtype eq 'eppc' || $addtype eq typeTargetID
-                ? { typeTargetID()            => pack_eppc($db->{ID}, @add) }
+			: $addtype eq 'eppc' || $addtype eq typeTargetID
+				? { typeTargetID() => pack_eppc($db->{ID}, @add) }
 
-            : $addtype eq 'psn'  || $addtype eq typeProcessSerialNumber
-                ? { typeProcessSerialNumber() => pack_psn($add[0]) } 
+			: $addtype eq 'psn'  || $addtype eq typeProcessSerialNumber
+				? { typeProcessSerialNumber() => pack_psn($add[0]) } 
 
-            : $addtype eq 'path'
-                ? { typeProcessSerialNumber() => _path_to_psn($add[0]) }
+			: $addtype eq 'path'
+				? { typeProcessSerialNumber() => _path_to_psn($add[0]) }
 
-            : { $addtype => $add[0] }
+			: { $addtype => $add[0] }
 
-        : { typeApplSignature() => $self->{ID} };
+		: { typeApplSignature() => $self->{ID} };
 
-    @{$self}{qw(CLASS NAMES IDS)} = _merge_classes($db);
-    _merge_enums($db, $self);
+	@{$self}{qw(CLASS NAMES IDS)} = _merge_classes($db);
+	_merge_enums($db, $self);
 
-    bless($self, $class);
+	bless($self, $class);
 }
 
 #=============================================================================#
 # help UNIVERSAL::can out
 
 sub can {
-    my($self, $meth) = @_;
-    return unless @_ == 2;
-    my $can = UNIVERSAL::can($self, $meth);
-    unless ($can) {
-        $AUTOLOAD = ref($self) . "::$meth";
-        $can = AUTOLOAD('AUTOLOAD::can', $self);
-    }
-    return $can;
+	my($self, $meth) = @_;
+	return unless @_ == 2;
+	my $can = UNIVERSAL::can($self, $meth);
+	unless ($can) {
+		$AUTOLOAD = ref($self) . "::$meth";
+		$can = AUTOLOAD('AUTOLOAD::can', $self);
+	}
+	return $can;
 }
 
 #=============================================================================#
 # define event calls as subs
 
 sub AUTOLOAD {
-    my $can = $_[0] eq 'AUTOLOAD::can' ? shift : 0;
-    my $self = $_[0];
-    (my $name = $AUTOLOAD) =~ s/^.*://;
-    my $sub;
+	my $can = $_[0] eq 'AUTOLOAD::can' ? shift : 0;
+	my $self = $_[0];
+	(my $name = $AUTOLOAD) =~ s/^.*://;
+	my $sub;
 
-    if ($name eq 'DESTROY') {
-        return;
-    } elsif ($name =~ /^(?:REPLY|SWITCH|MODE|PRIORITY|TIMEOUT|RETOBJ)$/) {
-        $sub = sub { $_[0]->{$name} = $_[1] if $_[1]; $_[0]->{$name} };
-    }
+	if ($name eq 'DESTROY') {
+		return;
+	} elsif ($name =~ /^(?:REPLY|SWITCH|MODE|PRIORITY|TIMEOUT|RETOBJ|ERRORS)$/) {
+		$sub = sub { $_[0]->{$name} = $_[1] if $_[1]; $_[0]->{$name} };
+	}
 
-    unless ($sub) {
-        (my $auto = $AUTOLOAD) =~ s/:([^:]+)$/:\L$1/;
-        $sub = \&$auto if defined &$auto;
-    }
+	unless ($sub) {
+		(my $auto = $AUTOLOAD) =~ s/:([^:]+)$/:\L$1/;
+		$sub = $auto if defined &$auto;
+	}
 
-    unless ($sub) {
-        if (my $event = _find_event($self, lc $name)) {
-            $sub = sub { _primary($_[0], $event, @_[1 .. $#_]) }
-        } elsif (! $can) {
-            croak "No event '$name' available from glue for '$self->{GLUENAME}'";
-        }
-    }
+	unless ($sub) {
+		if (my $event = _find_event($self, lc $name)) {
+			$sub = sub { _primary($_[0], $event, lc $name, @_[1 .. $#_]) }
+		} elsif (! $can) {
+			croak "No event '$name' available from glue for '$self->{GLUENAME}'";
+		}
+	}
 
-    # install new sub, only do AUTOLOAD for it once!
-    if ($sub) {
-        no strict 'refs';
-        *{$AUTOLOAD} = $sub;
-    }
+	# install new sub, only do AUTOLOAD for it once!
+	if ($sub) {
+		no strict 'refs';
+		*{$AUTOLOAD} = $sub;
+	}
 
-    return $sub if $can;
-    goto &$sub;
+	return $sub if $can;
+	goto &$sub;
 }
 
 #=============================================================================#
@@ -181,13 +180,13 @@ sub AUTOLOAD {
 # will NOT return error if exists, because MacPerl does not handle replies well
 
 sub login {
-    my($self, $user, $pass) = @_;
+	my($self, $user, $pass) = @_;
 
-    my $evt = build_event(qw(gtqp lgin McPL), q{'----':TEXT(@), pwrd:TEXT(@)},
-        $user, $pass);
-    $evt->send_event(kAENoReply);
+	my $evt = build_event(qw(gtqp lgin McPL), q{'----':TEXT(@), pwrd:TEXT(@)},
+		$user, $pass);
+	$evt->send_event(kAENoReply);
 
-    return 1;
+	return 1;
 }
 
 #=============================================================================#
@@ -195,441 +194,472 @@ sub login {
 # (see sub AUTOLOAD)
 
 sub _primary {
-    my($self, $e, @args) = @_;
-    my($evt, $rep, %xargs, $dobj);
+	my($self, $e, $name, @args) = @_;
+	my($evt, %xargs, $dobj, @origargs);
 
-    my($class, $event, $reply, $params) = @{$e}{qw(class event reply params)};
+	my($class, $event, $reply, $params) = @{$e}{qw(class event reply params)};
 
-    $dobj = shift @args if @args % 2;
+	$dobj = shift @args if @args % 2;
 
-    %xargs = @args;
-    for (keys %xargs) {
-        delete $xargs{$_} unless /^(?:CALLBACK|CLBK_ARG)$/;
-    }
-    @xargs{keys %{$self->{ADDRESS}}} = values %{$self->{ADDRESS}};
+	%xargs = @args;
+	for (keys %xargs) {
+		delete $xargs{$_} unless /^(?:CALLBACK|CLBK_ARG)$/;
+	}
+	@xargs{keys %{$self->{ADDRESS}}} = values %{$self->{ADDRESS}};
 
-    # create event (Mac::AppleEvents::Simple object)
-    $evt = build_event($class, $event, \%xargs);
+	# create event (Mac::AppleEvents::Simple object)
+	$evt = build_event($class, $event, \%xargs);
 
-    # prepare parameters (direct object)
-    if (defined $dobj) {
-        croak "Direct object parameter not present"
-            unless exists $params->{keyDirectObject()};
-        _params($self, $evt, $params->{keyDirectObject()}, $dobj);
-    }
+	# prepare parameters (direct object)
+	if (defined $dobj) {
+		croak "Direct object parameter not present"
+			unless exists $params->{keyDirectObject()};
+		_params($self, $evt, $params->{keyDirectObject()}, $dobj);
+		push @origargs, 'DOBJ', $dobj;
+	}
 
-    # prepare parameters (all the rest)
-    my $hash = {@args};
-    if ($hash) {
-        for my $p (keys %$hash) {
-            next if $p =~ /^(?:REPLY|SWITCH|MODE|PRIORITY|TIMEOUT|RETOBJ|CALLBACK|CLBK_ARG)$/;
-            my $pp = $p eq 'DOBJ' ? keyDirectObject : lc $p;
-            croak "'$p' parameter not available" unless exists $params->{$pp};
-            _params($self, $evt, $params->{$pp}, $hash->{$p});
-        }
-    }
+	# prepare parameters (all the rest)
+	my $hash = {@args};
+	if ($hash) {
+		for my $p (keys %$hash) {
+			next if $p =~ /^(?:REPLY|SWITCH|MODE|PRIORITY|TIMEOUT|RETOBJ|ERRORS|CALLBACK|CLBK_ARG)$/;
+			my $pp = $p eq 'DOBJ' ? keyDirectObject : lc $p;
+			croak "'$p' parameter not available" unless exists $params->{$pp};
+			_params($self, $evt, $params->{$pp}, $hash->{$p});
+			push @origargs, $pp, $p;
+		}
+	}
 
-    # prepare send parameters and send event
-    if (1) {  # switch to 0 for testing
-        local $Mac::AppleEvents::Simple::SWITCH =
-            $hash->{SWITCH} ? $hash->{SWITCH} : $self->{SWITCH};
+	# prepare send parameters and send event
+	local $Mac::AppleEvents::Simple::SWITCH =
+		$hash->{SWITCH} ? $hash->{SWITCH} : $self->{SWITCH};
 
-        # we'll wait if REPLY not set and TIMEOUT is set
-        if (!exists $hash->{REPLY} && exists $hash->{TIMEOUT}) {
-            $self->{REPLY} = 1;
-        }
+	# we'll wait if REPLY not set and TIMEOUT is set
+	if (!exists $hash->{REPLY} && exists $hash->{TIMEOUT}) {
+		$self->{REPLY} = 1;
+	}
 
-        my $mode =
-            (ref $hash->{CALLBACK} eq 'CODE'
-                ? kAEQueueReply
-                : (exists $hash->{REPLY}    # check event setting
-                    ? $hash->{REPLY}
-                    : exists $self->{REPLY} # check global setting
-                        ? $self->{REPLY}
-                        : 1                 # deafult is to wait
-                )
-                ? kAEWaitReply
-                : kAENoReply)
+	my $mode =
+		(ref $hash->{CALLBACK} eq 'CODE'
+			? kAEQueueReply
+			: (exists $hash->{REPLY}	# check event setting
+				? $hash->{REPLY}
+				: exists $self->{REPLY}	# check global setting
+					? $self->{REPLY}
+					: 1		# default to wait
+			)
+				? kAEWaitReply
+				: kAENoReply)
 
-            | (exists $hash->{MODE}
-                ? $hash->{MODE}
-                : exists $self->{MODE}
-                    ? $self->{MODE}
-                    : (kAECanInteract | kAECanSwitchLayer));
+			| (exists $hash->{MODE}
+				? $hash->{MODE}
+				: exists $self->{MODE}
+					? $self->{MODE}
+					: (kAECanInteract | kAECanSwitchLayer));
 
-        my $priority =
-            exists $hash->{PRIORITY}
-                ? $hash->{PRIORITY}
-                : exists $self->{PRIORITY}
-                    ? $self->{PRIORITY}
-                    : kAENormalPriority;
+	my $priority =
+		exists $hash->{PRIORITY}
+			? $hash->{PRIORITY}
+			: exists $self->{PRIORITY}
+				? $self->{PRIORITY}
+				: kAENormalPriority;
 
-        my $timeout = 
-            exists $hash->{TIMEOUT}
-                ? 60 * $hash->{TIMEOUT}     # convert seconds to ticks
-                : exists $self->{TIMEOUT}
-                    ? 60 * $self->{TIMEOUT}
-                    : kNoTimeOut;
+	my $timeout = 
+		exists $hash->{TIMEOUT}
+			? 60 * $hash->{TIMEOUT}		# convert seconds to ticks
+			: exists $self->{TIMEOUT}
+				? 60 * $self->{TIMEOUT}
+				: kNoTimeOut;
 
-        $evt->send_event($mode, $priority, $timeout);
-    }
+	$evt->send_event($mode, $priority, $timeout);
 
-    my $retobj = exists $hash->{RETOBJ}
-        ? $hash->{RETOBJ}
-        : exists $self->{RETOBJ}
-            ? $self->{RETOBJ}
-            : 0;
+	my $retobj = exists $hash->{RETOBJ}
+		? $hash->{RETOBJ}
+		: exists $self->{RETOBJ}
+			? $self->{RETOBJ}
+			: 0;
 
-    local $AE_GET{typeObjectSpecifier()} = sub { (_obj_desc($self, $_[0]), 1) };
+	my $error_handler = exists $hash->{ERRORS}
+		? $hash->{ERRORS}
+		: exists $self->{ERRORS}
+			? $self->{ERRORS}
+			: 0;
 
-    my @return;
-    if ($retobj) {
-        @return = $evt;
-    } elsif (my $type = $evt->type) {
-        @return = $evt->get;
-        @return = _fix_reco($self, {@return}) if $type eq typeAERecord;
-        @return = @{_fix_reco($self, \@return)} if $type eq typeAEList;
-    }
-    
-    $^E = exists $evt->{ERRNO} ? $evt->{ERRNO} : 0; # restore errno
-    return wantarray ? @return : $return[0];
+	local $AE_GET{typeObjectSpecifier()} = sub { (_obj_desc($self, $_[0]), 1) };
+
+	my @return;
+	if ($retobj) {
+		@return = $evt;
+	} elsif (my $type = $evt->type) {
+		@return = $evt->get;
+		@return = _fix_reco($self, {@return}) if $type eq typeAERecord;
+		@return = @{_fix_reco($self, \@return)} if $type eq typeAEList;
+	}
+
+	$^E = exists $evt->{ERRNO} ? $evt->{ERRNO} : 0; # restore errno
+
+	my $return = 1;
+	# if error handler, only return if error handler returns true
+	# what should error handler be passed?
+	$return = $error_handler->($self, $evt, $self->{GLUENAME},
+		$name, $^E, $^E+0, @origargs
+	) if $^E && $error_handler;
+
+	return(wantarray ? @return : $return[0]) if $return;
 }
 
 #=============================================================================#
 # prepare all event parameters
 
 sub _params {
-    my($self, $evt, $p, $data) = @_;
-    my($key, $type) = @{$p}[0, 1];
+	my($self, $evt, $p, $data) = @_;
+	my($key, $type) = @{$p}[0, 1];
 
-    if (ref $data eq 'Mac::AEParamType') {
-        ($data, $type) = @{$data}[0, 1];
-    } elsif ($type eq typeObjectSpecifier && ref $data ne 'Mac::AEObjDesc') {
-        $type = $data =~ /^[+-]?\d+$/ ? typeInteger : typeChar;
-    }
+	if (ref $data eq 'Mac::AEParamType') {
+		($data, $type) = @{$data}[1, 0];
+	} elsif ($type eq typeObjectSpecifier && ref $data ne 'Mac::AEObjDesc') {
+		$type = $data =~ /^[+-]?\d+$/ ? typeInteger : typeChar;
+	}
 
-    my($desc, $dispose) = _get_desc($self, $data, $type);
-    AEPutParamDesc($evt->{EVT}, $key, $desc) or confess "Can't put $key/$desc into event: $^E";
-    AEDisposeDesc $desc if $dispose;
+	my($desc, $dispose) = _get_desc($self, $data, $type);
+	AEPutParamDesc($evt->{EVT}, $key, $desc)
+		or confess "Can't put $key/$desc into event: $^E";
+	AEDisposeDesc $desc if $dispose;
 }
 
 #=============================================================================#
 # Put anon array parameter data into AE list
 
 sub _do_list {
-    my($self, $data, $type) = @_;
-    my $list = AECreateList('', 0) or confess "Can't create list: $^E";
-    my $count = 0;
+	my($self, $data, $type) = @_;
+	my $list = AECreateList('', 0) or confess "Can't create list: $^E";
+	my $count = 0;
 
-    for my $d (@{$data}) {
-        my($desc, $dispose) = _get_desc($self, $d);
-        AEPutDesc($list, ++$count, $desc) or confess "Can't put $desc into $list: $^E";
-        AEDisposeDesc $desc if $dispose;
-    }
+	for my $d (@{$data}) {
+		my($desc, $dispose) = _get_desc($self, $d);
+		AEPutDesc($list, ++$count, $desc)
+			or confess "Can't put $desc into $list: $^E";
+		AEDisposeDesc $desc if $dispose;
+	}
 
-    return $list;
+	return $list;
 }
 
 #=============================================================================#
 # Put anon hash parameter data into AE record
 
 sub _do_rec {
-    my($self, $data, $type) = @_;
-    my $reco = AECreateList('', 1) or confess "Can't create record: $^E";
-    my $class;
+	my($self, $data, $type) = @_;
+	my $reco = AECreateList('', 1) or confess "Can't create record: $^E";
+	my $class;
 
-    while (my($k, $d) = each %{$data}) {
-        if ($k =~ /^class$/i) {
-            $class = _get_id($self, $d);
-            next;
-        }
-        my $key = _get_id($self, $k);
-        my($desc, $dispose) = _get_desc($self, $d);
-        AEPutKeyDesc($reco, $key, $desc) or confess "Can't put $key/$desc into $reco: $^E";
-        AEDisposeDesc $desc if $dispose;
-    }
+	while (my($k, $d) = each %{$data}) {
+		if ($k =~ /^class$/i) {
+			$class = _get_id($self, $d);
+			next;
+		}
+		my $key = _get_id($self, $k);
+		my($desc, $dispose) = _get_desc($self, $d);
+		AEPutKeyDesc($reco, $key, $desc)
+			or confess "Can't put $key/$desc into $reco: $^E";
+		AEDisposeDesc $desc if $dispose;
+	}
 
-    if ($class) {
-        my $nreco = AECoerceDesc($reco, $class) or confess "Can't coerce to '$class': $^E";
-        AEDisposeDesc $reco;
-        $reco = $nreco;
-    }
+	if ($class) {
+		my $nreco = AECoerceDesc($reco, $class)
+			or confess "Can't coerce to '$class': $^E";
+		AEDisposeDesc $reco;
+		$reco = $nreco;
+	}
 
-    return $reco;
+	return $reco;
 }
 
 #=============================================================================#
 # create AE descriptor record
 
 sub _do_obj {
-    my($self, $data, $class, $from) = @_;
-    my($list, $obj, $form, $dataform, $d, $ref);
-    $class = 'property' if $class =~ /^(?:of|in|prop)$/;
-    confess "Class '$class' does not exist for '$data'.\n" if ! exists $self->{NAMES}{$class};
+	my($self, $data, $class, $from) = @_;
+	my($list, $obj, $form, $dataform, $d, $ref);
+	$class = 'property' if $class =~ /^(?:of|in|prop)$/;
+	confess "Class '$class' does not exist for '$data'.\n"
+		unless exists $self->{NAMES}{$class};
 
-    $data = _get_objdesc($data);
-    $ref = ref $data;
-    if ($class eq 'property') {
-        $data = _get_id($self, $data) or croak "Can't find property '$data'.\n";
-        $form = typeProperty;
-    } elsif ($ref eq 'AEDesc' || $ref eq 'Mac::AEObjDescType') {
-        $data = $DESC_TYPE{$data->[0]}->($self, $class, @{$data}[1 .. $#{$data}])
-            if $ref eq 'Mac::AEObjDescType';
-        $dataform = $form = $data->type;
-        if ($form eq typeCompDescriptor || $form eq typeLogicalDescriptor) {
-            $form = formTest;
-        }
-    } elsif ($ref eq 'Mac::AEObjDescForm') {
-        $form = $$data[0];
-        $dataform = $$data[1] if @$data == 3;
-        $data = $$data[-1];
-    } elsif ($data =~ /^[+-]?\d+$/) {
-        $form = formAbsolutePosition;
-    } else {
-        $form = formName;
-    }
+	$data = _get_objdesc($data);
+	$ref = ref $data;
 
-    $dataform ||=
-        $form eq formName               ? typeChar      :
-        $form eq formAbsolutePosition   ? typeInteger   :
-        $form eq typeProperty           ? typeType      :
-        $form;
+	if ($class eq 'property') {
+		$data = _get_id($self, $data) or croak "Can't find property '$data'.\n";
+		$form = typeProperty;
 
-    $class = $self->{NAMES}{$class};
-    $list = AECreateList('', 1) or confess "Can't create list: $^E";
+	} elsif ($ref eq 'AEDesc' || $ref eq 'Mac::AEObjDescType') {
+		$data = $DESC_TYPE{$data->[0]}->($self, $class, @{$data}[1 .. $#{$data}])
+			if $ref eq 'Mac::AEObjDescType';
+		$dataform = $form = $data->type;
+		if ($form eq typeCompDescriptor || $form eq typeLogicalDescriptor) {
+			$form = formTest;
+		}
 
-    # keyAEForm
-    AEPutKey($list, keyAEForm, typeEnumerated, $form)
-        or confess "Can't put form:$form into object: $^E";
+	} elsif ($ref eq 'Mac::AEObjDescForm') {
+		$form = $$data[0];
+		$dataform = $$data[1] if @$data == 3;
+		$data = $$data[-1];
 
-    # keyAEDesiredClass
-    AEPutKey($list, keyAEDesiredClass, typeType, $class->{id})
-        or confess "Can't put want:$class->{id} into object: $^E";
+	} elsif ($data =~ /^[+-]?\d+$/) {
+		$form = formAbsolutePosition;
 
-    # kAEKeyData
-    ($d, $dataform) = _get_data($self, $data, $dataform);
-    if (ref $d eq 'AEDesc') {
-        AEPutKeyDesc($list, keyAEKeyData, $d)
-            or confess "Can't put seld:$d into object: $^E";
-    } else {
-        AEPutKey($list, keyAEKeyData, $dataform, $d)
-            or confess "Can't put seld:$dataform($d) into object: $^E";
-    }
+	} else {
+		$form = formName;
+	}
 
-    # keyAEContainer
-    if ($from && $from eq typeCurrentContainer) {
-        AEPutKey($list, keyAEContainer, $from, '')
-            or confess "Can't put from:$from into object: $^E";
-    } elsif ($from && $from eq typeObjectBeingExamined) {
-        AEPutKey($list, keyAEContainer, $from, '')
-            or confess "Can't put from:$from into object: $^E";
-    } elsif ($from) {
-        $from = _get_objdesc($from);
-        AEPutKeyDesc($list, keyAEContainer, $from)
-            or confess "Can't put from:$from into object: $^E";
-    } else {
-        AEPutKey($list, keyAEContainer, typeNull, '')
-            or confess "Can't put from:null into object: $^E";
-    }
+	$dataform ||=
+		$form eq formName		? typeChar	:
+		$form eq formAbsolutePosition	? typeInteger	:
+		$form eq typeProperty		? typeType	:
+		$form;
 
-    $obj = AECoerceDesc($list, typeObjectSpecifier) or confess "Can't coerce to 'obj ': $^E";
-    AEDisposeDesc $list;
+	$class = $self->{NAMES}{$class};
+	$list = AECreateList('', 1) or confess "Can't create list: $^E";
 
-    return _obj_desc($self, $obj);
+	# form / keyAEForm
+	AEPutKey($list, keyAEForm, typeEnumerated, $form)
+		or confess "Can't put form:$form into object: $^E";
+
+	# want / keyAEDesiredClass
+	AEPutKey($list, keyAEDesiredClass, typeType, $class->{id})
+		or confess "Can't put want:$class->{id} into object: $^E";
+
+	# seld / keyAEKeyData
+	($d, $dataform) = _get_data($self, $data, $dataform);
+	if (ref $d eq 'AEDesc') {
+		AEPutKeyDesc($list, keyAEKeyData, $d)
+			or confess "Can't put seld:$d into object: $^E";
+	} else {
+		AEPutKey($list, keyAEKeyData, $dataform, $d)
+			or confess "Can't put seld:$dataform($d) into object: $^E";
+	}
+
+	# type / keyAEContainer
+	if ($from && $from eq typeCurrentContainer) {
+		AEPutKey($list, keyAEContainer, $from, '')
+			or confess "Can't put from:$from into object: $^E";
+	} elsif ($from && $from eq typeObjectBeingExamined) {
+		AEPutKey($list, keyAEContainer, $from, '')
+			or confess "Can't put from:$from into object: $^E";
+	} elsif ($from) {
+		$from = _get_objdesc($from);
+		AEPutKeyDesc($list, keyAEContainer, $from)
+			or confess "Can't put from:$from into object: $^E";
+	} else {
+		AEPutKey($list, keyAEContainer, typeNull, '')
+			or confess "Can't put from:null into object: $^E";
+	}
+
+	$obj = AECoerceDesc($list, typeObjectSpecifier)
+		or confess "Can't coerce to 'obj ': $^E";
+	AEDisposeDesc $list;
+
+	return _obj_desc($self, $obj);
 }
 
 #=============================================================================#
 # create insertion record
 
 sub _do_loc ($;$) {
-    my($pos, $obj) = @_;
-    $obj = _get_objdesc($obj);
-    my $desc = ref $obj eq 'AEDesc' ? $obj : gNull();
-    my $list = AECreateList('', 1) or confess "Can't create list: $^E";
+	my($pos, $obj) = @_;
+	$obj = _get_objdesc($obj);
+	my $desc = ref $obj eq 'AEDesc' ? $obj : gNull();
+	my $list = AECreateList('', 1) or confess "Can't create list: $^E";
 
-    AEPutKeyDesc($list, keyAEObject, $desc) or confess "Can't put object in location: $^E";
-    AEPutKey($list, keyAEPosition, typeEnumerated, $INSL{$pos} || $pos)
-        or confess "Can't put pos in location: $^E";
+	AEPutKeyDesc($list, keyAEObject, $desc)
+		or confess "Can't put object in location: $^E";
+	AEPutKey($list, keyAEPosition, typeEnumerated, $INSL{$pos} || $pos)
+		or confess "Can't put pos in location: $^E";
 
-    my $insl = AECoerceDesc($list, typeInsertionLoc) or confess "Can't coerce $list to 'obj ': $^E";
-    AEDisposeDesc $list;
-    _save_desc($insl);
-    return $insl;
+	my $insl = AECoerceDesc($list, typeInsertionLoc)
+		or confess "Can't coerce $list to 'obj ': $^E";
+	AEDisposeDesc $list;
+	_save_desc($insl);
+	return $insl;
 }
 
 #=============================================================================#
 # create glue descriptor record
 
 sub _do_range {
-    my($self, $class, $r1, $r2) = @_;
+	my($self, $class, $r1, $r2) = @_;
 
-    $r1 = _do_obj($self, $r1, $class, typeCurrentContainer);
-    $r2 = _do_obj($self, $r2, $class, typeCurrentContainer);
+	$r1 = _do_obj($self, $r1, $class, typeCurrentContainer);
+	$r2 = _do_obj($self, $r2, $class, typeCurrentContainer);
 
-    my $list = AECreateList('', 1) or confess "Can't create list: $^E";
+	my $list = AECreateList('', 1) or confess "Can't create list: $^E";
 
-    AEPutKeyDesc($list, keyAERangeStart, $r1->{DESC}) or confess "Can't add param to list: $^E";
-    AEPutKeyDesc($list, keyAERangeStop,  $r2->{DESC}) or confess "Can't add param to list: $^E";
+	AEPutKeyDesc($list, keyAERangeStart, $r1->{DESC})
+		or confess "Can't add param to list: $^E";
+	AEPutKeyDesc($list, keyAERangeStop,  $r2->{DESC})
+		or confess "Can't add param to list: $^E";
 
-    my $rang = AECoerceDesc($list, typeRangeDescriptor) or confess "Can't coerce to range: $^E";
-    AEDisposeDesc $list;
-    _save_desc($rang);
+	my $rang = AECoerceDesc($list, typeRangeDescriptor)
+		or confess "Can't coerce to range: $^E";
+	AEDisposeDesc $list;
+	_save_desc($rang);
 
-    return $rang;
+	return $rang;
 }
 
 #=============================================================================#
 # create comparison descriptor record
 
 sub _do_comp {
-    my $self = shift;
-    my $len = @_;
-    my($p1, $d1, $op, $p2, $d2, $c1, $c2, $dispose1, $dispose2);
+	my $self = shift;
+	my $len = @_;
+	my($p1, $d1, $op, $p2, $d2, $c1, $c2, $dispose1, $dispose2);
 
-    $p1 = $len < 4 ? 'property' : shift;
-    $d1 = shift;
-    $op = shift;
-    $p2 = $len < 5 ? undef : shift;
-    $d2 = shift;
+	$p1 = $len < 4 ? 'property' : shift;
+	$d1 = shift;
+	$op = shift;
+	$p2 = $len < 5 ? undef : shift;
+	$d2 = shift;
 
-    unless (ref $op eq 'AEDesc') {
-        my $foo = $op;
-        $op = $COMP{lc $op} or croak "Comparison operator '$foo' not recognized";
-    }
+	unless (ref $op eq 'AEDesc') {
+		my $foo = $op;
+		$op = $COMP{lc $op} or croak "Comparison operator '$foo' not recognized";
+	}
 
-    if ($p1 eq 'property' && $d1 eq 'it') {
-        $c1 = new AEDesc typeObjectBeingExamined;
-        $dispose1 = 1;
-    } else {
-        $c1 = _do_obj($self, $d1, $p1, typeObjectBeingExamined)->{DESC};
-    }
+	if ($p1 eq 'property' && $d1 eq 'it') {
+		$c1 = new AEDesc typeObjectBeingExamined;
+		$dispose1 = 1;
+	} else {
+		$c1 = _do_obj($self, $d1, $p1, typeObjectBeingExamined)->{DESC};
+	}
 
-    if (defined $p2) {
-        $c2 = _do_obj($self, $d2, $p2, typeObjectBeingExamined)->{DESC};
-    } else {
-        ($c2, $dispose2) = _get_desc($self, $d2);
-    }
+	if (defined $p2) {
+		$c2 = _do_obj($self, $d2, $p2, typeObjectBeingExamined)->{DESC};
+	} else {
+		($c2, $dispose2) = _get_desc($self, $d2);
+	}
 
-    my $list = AECreateList('', 1) or confess "Can't create list: $^E";
+	my $list = AECreateList('', 1) or confess "Can't create list: $^E";
 
-    AEPutKeyDesc($list, keyAECompOperator, $op);
-    AEPutKeyDesc($list, keyAEObject1, $c1);
-    AEPutKeyDesc($list, keyAEObject2, $c2);
+	AEPutKeyDesc($list, keyAECompOperator, $op);
+	AEPutKeyDesc($list, keyAEObject1, $c1);
+	AEPutKeyDesc($list, keyAEObject2, $c2);
 
-    AEDisposeDesc $c1 if $dispose1;
-    AEDisposeDesc $c2 if $dispose2;
+	AEDisposeDesc $c1 if $dispose1;
+	AEDisposeDesc $c2 if $dispose2;
 
-    my $comp = AECoerceDesc($list, typeCompDescriptor)
-        or confess "Can't coerce list to comparison descriptor: $^E";
-    AEDisposeDesc $list;
-    _save_desc($comp);
+	my $comp = AECoerceDesc($list, typeCompDescriptor)
+		or confess "Can't coerce list to comparison descriptor: $^E";
+	AEDisposeDesc $list;
+	_save_desc($comp);
 
-    return $comp;
+	return $comp;
 }
 
 #=============================================================================#
 # create a logical descriptor record
 
 sub _do_logical {
-    my($self, $op, @args) = @_;
-    my $terms = AECreateList('', 0) or confess "Can't create list: $^E";
+	my($self, $op, @args) = @_;
+	my $terms = AECreateList('', 0) or confess "Can't create list: $^E";
 
-    unless (ref $op eq 'AEDesc') {
-        my $foo = $op;
-        $op = $LOGI{uc $op} or croak "Logical operator '$foo' not recognized";
-    }
+	unless (ref $op eq 'AEDesc') {
+		my $foo = $op;
+		$op = $LOGI{uc $op} or croak "Logical operator '$foo' not recognized";
+	}
 
-    for my $i (0 .. $#args) {
-        my $term = $args[$i];
-        my $desc;
-        croak "Each logical term must be in an anonymous array ($term)\n" if ref $term ne 'ARRAY';
+	for my $i (0 .. $#args) {
+		my $term = $args[$i];
+		my $desc;
+		croak "Each logical term must be in an anonymous array ($term)\n"
+			if ref $term ne 'ARRAY';
 
-        if (grep { ref ne 'ARRAY' } @{$term}[1 .. $#{$term}]) {
-            $desc = _do_comp($self, @$term);
-        } else {
-            $desc = _do_logical($self, @$term);
-        }
-        AEPutDesc($terms, $i + 1, $desc);
-    }
+		if (grep { ref ne 'ARRAY' } @{$term}[1 .. $#{$term}]) {
+			$desc = _do_comp($self, @$term);
+		} else {
+			$desc = _do_logical($self, @$term);
+		}
+		AEPutDesc($terms, $i + 1, $desc);
+	}
 
-    my $list = AECreateList('', 1) or confess "Can't create list: $^E";
-    AEPutKeyDesc($list, keyAELogicalOperator, $op);
-    AEPutKeyDesc($list, keyAELogicalTerms, $terms);
+	my $list = AECreateList('', 1) or confess "Can't create list: $^E";
+	AEPutKeyDesc($list, keyAELogicalOperator, $op);
+	AEPutKeyDesc($list, keyAELogicalTerms, $terms);
 
-    my $logi = AECoerceDesc($list, typeLogicalDescriptor)
-        or confess "Can't coerce list into logical descriptor: $^E";
-    AEDisposeDesc $terms;
-    AEDisposeDesc $list;
-    _save_desc($logi);
+	my $logi = AECoerceDesc($list, typeLogicalDescriptor)
+		or confess "Can't coerce list into logical descriptor: $^E";
+	AEDisposeDesc $terms;
+	AEDisposeDesc $list;
+	_save_desc($logi);
 
-    return $logi;
+	return $logi;
 }
 
 #=============================================================================#
 # help create a test object record
 
 sub _do_whose {
-    splice @_, 1, 1;    # remove class
-    if (grep { ref ne 'ARRAY' } @_[2 .. $#_]) {
-        goto &_do_comp;
-    } else {
-        goto &_do_logical;
-    }
+	splice @_, 1, 1;  # remove class
+	if (grep { ref ne 'ARRAY' } @_[2 .. $#_]) {
+		goto &_do_comp;
+	} else {
+		goto &_do_logical;
+	}
 }
 
 #=============================================================================#
 # return descriptor as needed
 
 sub _get_desc {
-    my($self, $data, $type) = @_;
-    my($desc, $dispose, $ref);
+	my($self, $data, $type) = @_;
+	my($desc, $dispose, $ref);
 
-    $dispose = 1;
-    $data = _get_objdesc($data);
-    $ref = ref $data;
+	$dispose = 1;
+	$data = _get_objdesc($data);
+	$ref = ref $data;
 
-    if ($ref eq 'ARRAY') {
-        $desc = _do_list($self, $data, $type);
-    } elsif ($ref eq 'HASH') {
-        $desc = _do_rec($self, $data, $type);
-    } elsif ($ref eq 'AEDesc') {
-        $desc = $data;
-        $dispose = 0;
-        _save_desc($desc);
-    } else {
-        my($d, $t);
-        $t = _get_type($self, $data, $type);
-        ($d, $t) = _get_data($self, $data, $t);
+	if ($ref eq 'ARRAY') {
+		$desc = _do_list($self, $data, $type);
+	} elsif ($ref eq 'HASH') {
+		$desc = _do_rec($self, $data, $type);
+	} elsif ($ref eq 'AEDesc') {
+		$desc = $data;
+		$dispose = 0;
+		_save_desc($desc);
+	} else {
+		my($d, $t);
+		$t = _get_type($self, $data, $type);
+		($d, $t) = _get_data($self, $data, $t);
 
-        if (ref $d eq 'AEDesc') {
-            $desc = $d;
-            $dispose = 0;
-            _save_desc($d);
-        } else {
-            $desc = AEDesc->new($t, $d);
-        }
-    }
+		if (ref $d eq 'AEDesc') {
+			$desc = $d;
+			$dispose = 0;
+			_save_desc($d);
+		} else {
+			$desc = AEDesc->new($t, $d);
+		}
+	}
 
-    return($desc, $dispose);
+	return($desc, $dispose);
 }
 
 #=============================================================================#
 # take a good guess at what the data type is
 
 sub _get_type {
-    my($self, $data, $type, $key) = @_;
-    my $i = 0;
+	my($self, $data, $type, $key) = @_;
+	my $i = 0;
 
-    if (defined $key) {
-        my $href = _get_id($self, $key, 1);
-        $type = $href->{types}[$i++] if exists $href->{types};
-    }
+	if (defined $key) {
+		my $href = _get_id($self, $key, 1);
+		$type = $href->{types}[$i++] if exists $href->{types};
+	}
 
-    if (!$type || $type eq typeWildCard) {
-        $type = $data =~ /^[+-]?\d+$/ ? typeInteger : typeChar;
-    }
+	if (!$type || $type eq typeWildCard) {
+		$type = $data =~ /^[+-]?\d+$/ ? typeInteger : typeChar;
+	}
 
-    return $type;
+	return $type;
 }
 
 #=============================================================================#
@@ -637,94 +667,94 @@ sub _get_type {
 # should only return data as simple non-reference scalar or AEDesc
 
 sub _get_data {
-    my($self, $data, $type) = @_;
-    my $t;
+	my($self, $data, $type) = @_;
+	my $t;
 
-    my $ref = ref $data;
+	my $ref = ref $data;
 
-    if ($ref eq 'Mac::AEEnum') {
-        my $id = _get_id($self, $data->[0]);
-        $data = $id if defined $id;
-        $type = typeEnumerated; # typeEnumerated or typeType ???
+	if ($ref eq 'Mac::AEEnum') {
+		my $id = _get_id($self, $data->[0]);
+		$data = $id if defined $id;
+		$type = typeEnumerated; # typeEnumerated or typeType ???
 
-    } elsif ($type eq typeType) {
-        my $id = _get_id($self, $data);
-        $data = $id if defined $id;
+	} elsif ($type eq typeType) {
+		my $id = _get_id($self, $data);
+		$data = $id if defined $id;
 
-    # see the %AE_PUT data structure
-    } elsif (exists $AE_PUT{$type}) {
-        ($data, $t) = $AE_PUT{$type}->($data);
-    }
+	# see the %AE_PUT data structure
+	} elsif (exists $AE_PUT{$type}) {
+		($data, $t) = $AE_PUT{$type}->($data);
+	}
 
-    return($data, $t || $type);
+	return($data, $t || $type);
 }
 
 #=============================================================================#
 # get class / property name
 
 sub _get_name {
-    my($self, $id) = @_;
-    if (exists $self->{IDS}{$id}) {
-        if (exists $self->{IDS}{$id}{name}) {
-            return $self->{IDS}{$id}{name};
-        }
-    }
-    return;
+	my($self, $id) = @_;
+	if (exists $self->{IDS}{$id}) {
+		if (exists $self->{IDS}{$id}{name}) {
+			return $self->{IDS}{$id}{name};
+		}
+	}
+	return;
 }
 
 #=============================================================================#
 # fix record stuff
 
 sub _fix_reco {
-    my($self, $data) = @_;
+	my($self, $data) = @_;
 
-    if (ref $data eq 'ARRAY') {
-        my @narr;
-        for my $i (@$data) {
-            push @narr, (ref $i eq 'HASH' || ref $i eq 'ARRAY')
-                ? _fix_reco($self, $i) : $i;
-        }
-        return \@narr;
-    } elsif (ref $data eq 'HASH') {
-        my %nreco;
-        for my $id (keys %$data) {
-            my $nid = _get_name($self, $id);
-            my $i = $data->{$id};
-            $nreco{$nid || $id} = (ref $i eq 'HASH' || ref $i eq 'ARRAY')
-                ? _fix_reco($self, $i) : $i;
-        }
-        return \%nreco;
-    }
+	if (ref $data eq 'ARRAY') {
+		my @narr;
+		for my $i (@$data) {
+			push @narr, (ref $i eq 'HASH' || ref $i eq 'ARRAY')
+				? _fix_reco($self, $i) : $i;
+		}
+		return \@narr;
+	} elsif (ref $data eq 'HASH') {
+		my %nreco;
+		for my $id (keys %$data) {
+			my $nid = _get_name($self, $id);
+			my $i = $data->{$id};
+			$nreco{$nid || $id} = (ref $i eq 'HASH' || ref $i eq 'ARRAY')
+				? _fix_reco($self, $i) : $i;
+		}
+		return \%nreco;
+	}
 }
 
 #=============================================================================#
 # get class / property id
 
 sub _get_id {
-    my($self, $name, $obj) = @_;
-    (my $new = lc $name) =~ tr/ /_/;
-    my $ref = $self->{NAMES}{$new} if exists $self->{NAMES}{$new};
-    return $obj ? $ref : $ref->{id};
+	my($self, $name, $obj) = @_;
+	(my $new = lc $name) =~ tr/ /_/;
+	my $ref = $self->{NAMES}{$new} if exists $self->{NAMES}{$new};
+	return $obj ? $ref : $ref->{id};
 }
 
 #=============================================================================#
 # get Mac::AEObjDesc
 
 sub _get_objdesc {
-    my $ref = ref $_[0];
-    if ($ref eq 'Mac::AEObjDesc') {
-        return $_[0]->{DESC};
-    } else {
-        return $_[0];
-    }
+	my $ref = ref $_[0];
+	if ($ref eq 'Mac::AEObjDesc') {
+		return $_[0]->{DESC};
+	} else {
+		return $_[0];
+	}
 }
 
 #=============================================================================#
 # create Mac::AEObjDesc
 
 sub _obj_desc {
-    _save_desc($_[1]);
-    my $self = bless {GLUE => $_[0], DESC => $_[1]}, 'Mac::AEObjDesc';
+	_save_desc($_[1]);
+	my $self = bless {GLUE => $_[0], DESC => $_[1]}, 'Mac::AEObjDesc';
 }
 
 #=============================================================================#
@@ -736,78 +766,84 @@ sub _save_desc { $DESCS{$_[0]} = $_[0] }
 # find all information for an event, based on its "name"
 
 sub _find_event {
-    my($self, $name) = @_;
-    my $event;
+	my($self, $name) = @_;
+	my $event;
 
-    return $SPECIALEVENT{$name} if exists $SPECIALEVENT{$name};
+	return $SPECIALEVENT{$name} if exists $SPECIALEVENT{$name};
 
-    for ($self->{_DB}{EVENT}, @OTHEREVENT) {
-        if (exists $_->{$name}) {
-            $event = $_->{$name};
-            last;
-        }
-    }
+	for ($self->{_DB}{EVENT}, @OTHEREVENT) {
+		if (exists $_->{$name}) {
+			$event = $_->{$name};
+			last;
+		}
+	}
 
-    return $event;
+	return $event;
 }
 
 #=============================================================================#
 # is class a plural of another?
 
 sub _is_plural {
-    my($self, $class) = @_;
-    my $pl = 'c@#!';
-    return unless exists $self->{CLASS}{$class}{properties};
-    my $pref = $self->{CLASS}{$class}{properties};
-    return scalar grep { $pref->{$_}[0] && $pref->{$_}[0] eq $pl } keys %$pref;
+	my($self, $class) = @_;
+	my $pl = 'c@#!';
+	return unless exists $self->{CLASS}{$class}{properties};
+	my $pref = $self->{CLASS}{$class}{properties};
+	return scalar grep { $pref->{$_}[0] && $pref->{$_}[0] eq $pl } keys %$pref;
 }
 
 #=============================================================================#
 # create an AE object
 
 sub prop {
-    @_ = ($_[0], 'property', @_[1 .. $#_]);
-    goto &obj;
+	@_ = ($_[0], 'property', @_[1 .. $#_]);
+	goto &obj;
 }
 
 sub obj {
-    my($self, @data, $obj, @obj) = @_;
+	my($self, @data, $obj, @obj) = @_;
 
-    if (ref($data[-1]) =~ /^(Mac::)?AE(?:Obj)?Desc$/) { # @data % 2 && 
-        $obj = pop @data;
-    }
+	if (ref($data[-1]) =~ /^(Mac::)?AE(?:Obj)?Desc$/) { # @data % 2 && 
+		$obj = pop @data;
+	}
 
-    for (my $i = 0; $i <= $#data; $i++) {
-        my($k, $v) = $data[$i];
-        if (!($data[$i+1] && ref($data[$i+1]) =~ /^(Mac::)?AE/) && _is_plural($self, $k)) {
-            $v = gAll();
-        } else {
-            $i++;
-            $v = $data[$i];
-        }
-        push @obj, [$v, $k];
-    }
+	for (my $i = 0; $i <= $#data; $i++) {
+		my($k, $v) = $data[$i];
+		if (!(
+			$data[$i+1]
+				&&
+			ref($data[$i+1]) =~ /^(Mac::)?AE/)
+				&&
+			_is_plural($self, $k)
+		) {
+			$v = gAll();
+		} else {
+			$i++;
+			$v = $data[$i];
+		}
+		push @obj, [$v, $k];
+	}
 
-    for (reverse @obj) {
-        local $^W;
-        $obj = _do_obj($self, @{$_}[0, 1], $obj);
-    }
+	for (reverse @obj) {
+		local $^W;
+		$obj = _do_obj($self, @{$_}[0, 1], $obj);
+	}
 
-    return $obj;
+	return $obj;
 }
 
 #=============================================================================#
 # exported functions
 
-sub enum ($)        { bless [@_], 'Mac::AEEnum' }
+sub enum ($)		{ bless [@_], 'Mac::AEEnum' }
 
-sub obj_form ($$;$) { bless [@_], 'Mac::AEObjDescForm' }
+sub obj_form ($$;$)	{ bless [@_], 'Mac::AEObjDescForm' }
 
-sub param_type ($$) { bless [@_], 'Mac::AEParamType' }
+sub param_type ($$)	{ bless [@_], 'Mac::AEParamType' }
 
-sub whose           { bless [formTest, @_], 'Mac::AEObjDescType' }
+sub whose		{ bless [formTest, @_], 'Mac::AEObjDescType' }
 
-sub range ($$)      { bless [formRange, @_], 'Mac::AEObjDescType' }
+sub range ($$)		{ bless [formRange, @_], 'Mac::AEObjDescType' }
 
 sub location ($;$);
 *location = *_do_loc{CODE};
@@ -816,30 +852,30 @@ sub location ($;$);
 # launch the app (done automatically when an event is called if not running)
 
 sub launch {
-    my($self, $location) = @_;
-    if (defined $location) {
-        LaunchSpecs($location);
-    } else {
-        LaunchApps($self->{ID});
-    }
+	my($self, $location) = @_;
+	if (defined $location) {
+		LaunchSpecs($location);
+	} else {
+		LaunchApps($self->{ID});
+	}
 }
 
 #=============================================================================#
 # launch spec and then get PSN
 
 sub _path_to_psn {
-    my $path = shift;
+	my $path = shift;
 
-    confess "Path '$path' does not exist" unless -e $path;
+	confess "Path '$path' does not exist" unless -e $path;
 
-    my $lp = LaunchParam->new(
-        launchControlFlags => (launchContinue | launchNoFileFlags | launchDontSwitch),
-        launchAppSpec => $path
-    );
+	my $lp = LaunchParam->new(
+		launchControlFlags => (launchContinue | launchNoFileFlags | launchDontSwitch),
+		launchAppSpec => $path
+	);
 
-    my $psn = LaunchApplication($lp) or confess "Cannot launch '$path': $^E";
-    
-    return pack_psn($psn);
+	my $psn = LaunchApplication($lp) or confess "Cannot launch '$path': $^E";
+
+	return pack_psn($psn);
 }
 
 #=============================================================================#
@@ -847,107 +883,107 @@ sub _path_to_psn {
 # save them for further use by all Mac::Glue instances
 
 sub _open_others {
-    chomp(my $curdir = `pwd`);
-    my @others;
-    for my $dir (map { "$ENV{MACGLUEDIR}$_" } qw[dialects additions]) {
+	chomp(my $curdir = `pwd`);
+	my @others;
+	for my $dir (map { "$ENV{MACGLUEDIR}$_" } qw[dialects additions]) {
 		unless (-e $dir) {
 			warn "Please run gluedialect and gluescriptadds programs."
-			    unless $Mac::Glue::CREATINGGLUES;
+				unless $Mac::Glue::CREATINGGLUES;
 			next;
 		}
 
-        local *DIR;
-        opendir DIR, $dir or confess "Can't open directory '$dir': $!";
-        chdir $dir or confess "Can't chdir directory '$dir': $!";
+		local *DIR;
+		opendir DIR, $dir or confess "Can't open directory '$dir': $!";
+		chdir $dir or confess "Can't chdir directory '$dir': $!";
 
-        # ### add file type / creator checking
-        for (readdir DIR) {
-            next if /\.pod$/;
-            next if $_ eq "Icon\n";
-            tie my %db, 'MLDBM', $_, O_RDONLY or confess "Can't tie '$_': $!";
-            push @OTHEREVENT, $db{EVENT};
-            push @OTHERCLASS, $db{CLASS};
-            push @OTHERENUM, $db{ENUM};
-        }
-    }
-    chdir $curdir or confess "Can't chdir to '$curdir': $!";
+		# ### add file type / creator checking
+		for (readdir DIR) {
+			next if /\.pod$/;
+			next if $_ eq "Icon\n";
+			tie my %db, 'MLDBM', $_, O_RDONLY or confess "Can't tie '$_': $!";
+			push @OTHEREVENT, $db{EVENT};
+			push @OTHERCLASS, $db{CLASS};
+			push @OTHERENUM, $db{ENUM};
+		}
+	}
+	chdir $curdir or confess "Can't chdir to '$curdir': $!";
 }
 
 #=============================================================================#
 # merge additions, dialect, and glue classes together
 
 sub _merge_classes {
-    my($db) = @_;
-    if (!exists $MERGEDCLASSES{ $db->{ID} }) {
-        my($ids, $names) = ({}, {});
-        my($class, @classes) = ($db->{CLASS}, @OTHERCLASS);
+	my($db) = @_;
+	if (!exists $MERGEDCLASSES{ $db->{ID} }) {
+		my($ids, $names) = ({}, {});
+		my($class, @classes) = ($db->{CLASS}, @OTHERCLASS);
 
-        for my $c (keys %$class) {
-            $names->{$c}{id} = $class->{$c}{id};
-            $ids->{$names->{$c}{id}}{name} = $c;
+		for my $c (keys %$class) {
+			$names->{$c}{id} = $class->{$c}{id};
+			$ids->{$names->{$c}{id}}{name} = $c;
 
-            for my $p (keys %{$class->{$c}{properties}}) {
-                $names->{$p}{id} ||= $class->{$c}{properties}{$p}[0];
-                $ids->{$names->{$p}{id}}{name} ||= $p;
-                unshift @{$names->{$p}{types}}, $class->{$c}{properties}{$p}[1];
-            }
-        }
+			for my $p (keys %{$class->{$c}{properties}}) {
+				$names->{$p}{id} ||= $class->{$c}{properties}{$p}[0];
+				$ids->{$names->{$p}{id}}{name} ||= $p;
+				unshift @{$names->{$p}{types}}, $class->{$c}{properties}{$p}[1];
+			}
+		}
 
-        for my $tempc (@classes) {
-            for my $c (keys %$tempc) {
-                $names->{$c}{id} ||= $tempc->{$c}{id};
-                $ids->{$names->{$c}{id}}{name} = $c;
+		for my $tempc (@classes) {
+			for my $c (keys %$tempc) {
+				$names->{$c}{id} ||= $tempc->{$c}{id};
+				$ids->{$names->{$c}{id}}{name} = $c;
 
-                for my $p (keys %{$tempc->{$c}{properties}}) {
-                    $names->{$p}{id} ||= $tempc->{$c}{properties}{$p}[0];
-                    $ids->{$names->{$p}{id}}{name} ||= $p;
-                    unshift @{$names->{$p}{types}}, $tempc->{$c}{properties}{$p}[1];
+				for my $p (keys %{$tempc->{$c}{properties}}) {
+					$names->{$p}{id} ||= $tempc->{$c}{properties}{$p}[0];
+					$ids->{$names->{$p}{id}}{name} ||= $p;
+					unshift @{$names->{$p}{types}}, $tempc->{$c}{properties}{$p}[1];
 
-                    $class->{$c}{properties}{$p} = $tempc->{$c}{properties}{$p}
-                        if (exists $class->{$c} &&
-                            $class->{$c}{id} eq $tempc->{$c}{id} &&
-                            ! exists $class->{$c}{properties}{$p});
-                }
+					$class->{$c}{properties}{$p} = $tempc->{$c}{properties}{$p}
+						if (exists $class->{$c} &&
+							$class->{$c}{id} eq $tempc->{$c}{id} &&
+							! exists $class->{$c}{properties}{$p});
+				}
 
-                unless (exists $class->{$c}) {
-                    $class->{$c} = $tempc->{$c};
-                }
-            }
-        }
+				unless (exists $class->{$c}) {
+					$class->{$c} = $tempc->{$c};
+				}
+			}
+		}
 
-        $MERGEDCLASSES{ $db->{ID} } = [$class, $names, $ids];
-    }
-    return @{$MERGEDCLASSES{ $db->{ID} }};
+		$MERGEDCLASSES{ $db->{ID} } = [$class, $names, $ids];
+	}
+	return @{$MERGEDCLASSES{ $db->{ID} }};
 }
 
 #=============================================================================#
 # "merge" additions, dialect, and glue enumerations together
 
 sub _merge_enums {
-    my($db, $self) = @_;
-    if (!exists $MERGEDENUM{ $db->{ID} }) {
-        my $names = $self->{NAMES};
-        my $ids = $self->{IDS};
-        my($class, @classes) = ($db->{ENUM}, @OTHERENUM);
+	my($db, $self) = @_;
+	if (!exists $MERGEDENUM{ $db->{ID} }) {
+		my $names = $self->{NAMES};
+		my $ids = $self->{IDS};
+		my($class, @classes) = ($db->{ENUM}, @OTHERENUM);
 
-        for my $c (keys %$class) {
-            for my $n (keys %{$class->{$c}}) {
-                $names->{$n}{id} ||= $class->{$c}{$n}{id};
-                $ids->{$names->{$n}{id}} ||= $n;
-            }
-        }
+		for my $c (keys %$class) {
+			for my $n (keys %{$class->{$c}}) {
+				$names->{$n}{id} ||= $class->{$c}{$n}{id};
+				$ids->{$names->{$n}{id}} ||= $n;
+			}
+		}
 
-        for my $tempc (@classes) {
-            for my $c (keys %$tempc) {
-                for my $n (keys %{$tempc->{$c}}) {
-                    $names->{$n}{id} ||= $tempc->{$c}{$n}{id};
-                    $ids->{$names->{$n}{id}} ||= $n;
-                }
-            }
-        }
-        $MERGEDENUM{ $db->{ID} }++;
-    }
-    $MERGEDENUM{ $db->{ID} };
+		for my $tempc (@classes) {
+			for my $c (keys %$tempc) {
+				for my $n (keys %{$tempc->{$c}}) {
+					$names->{$n}{id} ||= $tempc->{$c}{$n}{id};
+					$ids->{$names->{$n}{id}} ||= $n;
+				}
+			}
+		}
+		$MERGEDENUM{ $db->{ID} }++;
+	}
+	$MERGEDENUM{ $db->{ID} };
 }
 
 #=============================================================================#
@@ -956,69 +992,78 @@ sub _merge_enums {
 *DESCS  = *Mac::AppleEvents::Simple::DESCS{HASH};
 
 %INSL = (
-    end         => kAEEnd,
-    before      => kAEBefore,
-    beginning   => kAEBeginning,
-    front       => kAEBeginning,
-    after       => kAEAfter,
-    back        => kAEAfter,
-    behind      => kAEAfter,
+	end		=> kAEEnd,
+	before		=> kAEBefore,
+	beginning  	=> kAEBeginning,
+	front		=> kAEBeginning,
+	after		=> kAEAfter,
+	back		=> kAEAfter,
+	behind		=> kAEAfter,
 );
 
 %COMP = (
-    g_t         => gGT(),
-    g_e         => gGE(),
-    equals      => gEquals(),
-    l_t         => gLT(),
-    l_e         => gLE(),
-    begins_with => gBeginsWith(),
-    ends_with   => gEndsWith(),
-    contains    => gContains(),
+	g_t		=> gGT(),
+	g_e		=> gGE(),
+	equals		=> gEquals(),
+	l_t		=> gLT(),
+	l_e		=> gLE(),
+	begins_with	=> gBeginsWith(),
+	ends_with	=> gEndsWith(),
+	contains	=> gContains(),
 );
 
 %LOGI = (
-    AND         => gAnd(),
-    OR          => gOr(),
-    NOT         => gNot(),
+	AND		=> gAnd(),
+	OR		=> gOr(),
+	NOT		=> gNot(),
 );
 
 %AE_PUT = (
-    typeShortInteger()  => sub {MacPack(typeShortInteger,   $_[0])},
-    typeInteger()       => sub {MacPack(typeInteger,        $_[0])},
-    typeBoolean()       => sub {MacPack(typeBoolean,        $_[0])},
-    typeChar()          => sub {MacPack(typeChar,           $_[0])},
-    typeFSS()           => sub {MacPack(typeFSS,            $_[0])},
-    typeAlias()         => sub {
-        my $alis = NewAliasMinimal($_[0]) or croak "Can't create alias for '$_[0]': $^E";
-        return $alis->get;
-    },
-    typeWildCard()      => sub {
-        my $type = _get_type('', $_[0], typeWildCard);
-        my $data = _get_data('', $_[0], $type);
-        return($data, $type);
-    },
-    typeProcessSerialNumber() => sub { pack_psn($_[0]) },
+	typeShortInteger()	=> sub {MacPack(typeShortInteger,	$_[0])},
+	typeInteger()		=> sub {MacPack(typeInteger,		$_[0])},
+	typeBoolean()		=> sub {MacPack(typeBoolean,		$_[0])},
+	typeChar()		=> sub {MacPack(typeChar,		$_[0])},
+	typeFSS()		=> sub {MacPack(typeFSS,		$_[0])},
+	typeAlias()		=> sub {
+		my $alis = NewAliasMinimalFromFullPath($_[0])
+			or croak "Can't create alias for '$_[0]': $^E";
+		return $alis->get;
+	},
+	typeWildCard()		=> sub {
+		my $type = _get_type('', $_[0], typeWildCard);
+		my $data = _get_data('', $_[0], $type);
+		return($data, $type);
+	},
+	typeProcessSerialNumber() => sub { pack_psn($_[0]) },
 
-    # just a guess here ... empty four bytes for lang code, maybe?
-    'itxt'              => sub {'    ' . MacPack(typeChar, $_[0])},
+	# just a guess here ... empty four bytes for lang code, maybe?
+	'itxt' => sub {'    ' . MacPack(typeChar, $_[0])},
 );
 
 %DESC_TYPE = (
-    formRange()   => \&_do_range,
-    formTest()    => \&_do_whose,
+	formRange()	=> \&_do_range,
+	formTest()	=> \&_do_whose,
 );
 
 %SPECIALEVENT = (
-    'set'    => {'class' => 'core', 'event' => 'setd',
-                'reply' => ['****', 0, 0, 0], 'params' => {
-                    '----' => [keyDirectObject, 'obj ', 1, 0, 0, 1],
-                    'to' => ['data', '****', 1, 0, 0],
-                }},
-    'get'    => {'class' => 'core', 'event' => 'getd',
-                'reply' => ['****', 1, 0, 0], 'params' => {
-                    '----' => [keyDirectObject, 'obj ', 1, 0, 0, 0],
-                    'as' => ['rtyp', 'type', 0, 1, 0],
-                }},
+	'set'	=> {
+		'class'		=> 'core',
+		'event'		=> 'setd',
+		'reply'		=> ['****', 0, 0, 0],
+		'params'	=> {
+			'----'	=> [keyDirectObject, 'obj ', 1, 0, 0, 1],
+			'to'	=> ['data', '****', 1, 0, 0],
+		}
+	},
+	'get'	=> {
+		'class'		=> 'core',
+		'event'		=> 'getd',
+		'reply'		=> ['****', 1, 0, 0],
+		'params'	=> {
+			'----' => [keyDirectObject, 'obj ', 1, 0, 0, 0],
+			'as' => ['rtyp', 'type', 0, 1, 0],
+		}
+	},
 );
 
 %SPECIALCLASS = (
@@ -1028,62 +1073,62 @@ sub _merge_enums {
 #=============================================================================#
 # other glue* stuff
 
-use constant glueTrue       => enum('true');
-use constant glueFalse      => enum('false');
+use constant glueTrue		=> enum('true');
+use constant glueFalse		=> enum('false');
 
-use constant glueFirst      => obj_form(formAbsolutePosition, typeAbsoluteOrdinal, kAEFirst);
-use constant glueMiddle     => obj_form(formAbsolutePosition, typeAbsoluteOrdinal, kAEMiddle);
-use constant glueLast       => obj_form(formAbsolutePosition, typeAbsoluteOrdinal, kAELast);
-use constant glueAny        => obj_form(formAbsolutePosition, typeAbsoluteOrdinal, kAEAny);
-use constant glueAll        => obj_form(formAbsolutePosition, typeAbsoluteOrdinal, kAEAll);
-use constant glueNext       => obj_form(formRelativePosition, typeEnumerated, kAENext);
-use constant gluePrevious   => obj_form(formRelativePosition, typeEnumerated, kAEPrevious);
+use constant glueFirst		=> obj_form(formAbsolutePosition, typeAbsoluteOrdinal, kAEFirst);
+use constant glueMiddle		=> obj_form(formAbsolutePosition, typeAbsoluteOrdinal, kAEMiddle);
+use constant glueLast		=> obj_form(formAbsolutePosition, typeAbsoluteOrdinal, kAELast);
+use constant glueAny		=> obj_form(formAbsolutePosition, typeAbsoluteOrdinal, kAEAny);
+use constant glueAll		=> obj_form(formAbsolutePosition, typeAbsoluteOrdinal, kAEAll);
+use constant glueNext		=> obj_form(formRelativePosition, typeEnumerated, kAENext);
+use constant gluePrevious	=> obj_form(formRelativePosition, typeEnumerated, kAEPrevious);
 
-use constant glueNull       => new AEDesc typeNull;
+use constant glueNull		=> new AEDesc typeNull;
 
-use constant glueAnd        => new AEDesc typeEnumerated, kAEAND;
-use constant glueOr         => new AEDesc typeEnumerated, kAEOR;
-use constant glueNot        => new AEDesc typeEnumerated, kAENOT;
+use constant glueAnd		=> new AEDesc typeEnumerated, kAEAND;
+use constant glueOr		=> new AEDesc typeEnumerated, kAEOR;
+use constant glueNot		=> new AEDesc typeEnumerated, kAENOT;
 
-use constant glueGT         => new AEDesc typeEnumerated, kAEGreaterThan;
-use constant glueGE         => new AEDesc typeEnumerated, kAEGreaterThanEquals;
-use constant glueEquals     => new AEDesc typeEnumerated, kAEEquals;
-use constant glueLT         => new AEDesc typeEnumerated, kAELessThan;
-use constant glueLE         => new AEDesc typeEnumerated, kAELessThanEquals;
-use constant glueBeginsWith => new AEDesc typeEnumerated, kAEBeginsWith;
-use constant glueEndsWith   => new AEDesc typeEnumerated, kAEEndsWith;
-use constant glueContains   => new AEDesc typeEnumerated, kAEContains;
+use constant glueGT		=> new AEDesc typeEnumerated, kAEGreaterThan;
+use constant glueGE		=> new AEDesc typeEnumerated, kAEGreaterThanEquals;
+use constant glueEquals		=> new AEDesc typeEnumerated, kAEEquals;
+use constant glueLT		=> new AEDesc typeEnumerated, kAELessThan;
+use constant glueLE		=> new AEDesc typeEnumerated, kAELessThanEquals;
+use constant glueBeginsWith	=> new AEDesc typeEnumerated, kAEBeginsWith;
+use constant glueEndsWith	=> new AEDesc typeEnumerated, kAEEndsWith;
+use constant glueContains	=> new AEDesc typeEnumerated, kAEContains;
 
 
-use constant gTrue          => glueTrue();
-use constant gFalse         => glueFalse();
+use constant gTrue		=> glueTrue();
+use constant gFalse		=> glueFalse();
 
-use constant gFirst         => glueFirst();
-use constant gMiddle        => glueMiddle();
-use constant gLast          => glueLast();
-use constant gAny           => glueAny();
-use constant gAll           => glueAll();
-use constant gNext          => glueNext();
-use constant gPrevious      => gluePrevious();
+use constant gFirst		=> glueFirst();
+use constant gMiddle		=> glueMiddle();
+use constant gLast		=> glueLast();
+use constant gAny		=> glueAny();
+use constant gAll		=> glueAll();
+use constant gNext		=> glueNext();
+use constant gPrevious		=> gluePrevious();
 
-use constant gNull          => glueNull();
+use constant gNull		=> glueNull();
 
-use constant gAnd           => glueAnd();
-use constant gOr            => glueOr();
-use constant gNot           => glueNot();
+use constant gAnd		=> glueAnd();
+use constant gOr		=> glueOr();
+use constant gNot		=> glueNot();
 
-use constant gGT            => glueGT();
-use constant gGE            => glueGE();
-use constant gEquals        => glueEquals();
-use constant gLT            => glueLT();
-use constant gLE            => glueLE();
-use constant gBeginsWith    => glueBeginsWith();
-use constant gEndsWith      => glueEndsWith();
-use constant gContains      => glueContains();
+use constant gGT		=> glueGT();
+use constant gGE		=> glueGE();
+use constant gEquals		=> glueEquals();
+use constant gLT		=> glueLT();
+use constant gLE		=> glueLE();
+use constant gBeginsWith	=> glueBeginsWith();
+use constant gEndsWith		=> glueEndsWith();
+use constant gContains		=> glueContains();
 
 for (gNull(), gAnd(), gOr(), gNot(), gGT(), gGE(),
-    gEquals(), gLT(), gLE(), gBeginsWith(), gEndsWith(), gContains()) {
-    _save_desc($_);   
+	gEquals(), gLT(), gLE(), gBeginsWith(), gEndsWith(), gContains()) {
+	_save_desc($_);   
 }
 
 #=============================================================================#
@@ -1098,14 +1143,20 @@ Mac::Glue - Control Mac apps with Apple event terminology
 
 =head1 SYNOPSIS
 
-    use Mac::Glue;
-    my $glue = Mac::Glue->new('Finder');
-    $glue->open( $glue->prop('System Folder') );
-    # see rest of docs for lots more info
+	use Mac::Glue;
+	my $glue = Mac::Glue->new('Finder');
+	$glue->open( $glue->prop('System Folder') );
+	# see rest of docs for lots more info
 
 =head1 DESCRIPTION
 
-*** THIS IS BETA SOFTWARE.  CAVEAT SCRIPTOR. ***
+You should have the latest cpan-mac distribution:
+
+	http://sourceforge.net/projects/cpan-mac/
+
+For more information, support, CVS, etc.:
+
+	http://sourceforge.net/projects/mac-glue/
 
 Mac OS apps speak to each other with a I<lingua franca> called B<Apple
 events>.  The most common way to do Apple events (aside from doaing them
@@ -1129,29 +1180,29 @@ Compare.
 
 =item Raw Mac::AppleEvents method
 
-    use Mac::AppleEvents;
-    $evt = AEBuildAppleEvent('aevt', 'odoc', typeApplSignature, 'MACS',
-        kAutoGenerateReturnID, kAnyTransactionID,
-        "'----': obj{want:type(prop), from:'null'()," . 
-        "form:prop, seld:type(macs)}"
-    ) or die $^E;
-    $rep = AESend($evt, kAEWaitReply) or die $^E;
-    AEDisposeDesc($evt);
-    AEDisposeDesc($rep);
+	use Mac::AppleEvents;
+	$evt = AEBuildAppleEvent('aevt', 'odoc', typeApplSignature, 'MACS',
+		kAutoGenerateReturnID, kAnyTransactionID,
+		"'----': obj{want:type(prop), from:'null'()," . 
+		"form:prop, seld:type(macs)}"
+	) or die $^E;
+	$rep = AESend($evt, kAEWaitReply) or die $^E;
+	AEDisposeDesc($evt);
+	AEDisposeDesc($rep);
 
 =item Easier Mac::AppleEvents::Simple method
 
-    use Mac::AppleEvents::Simple;
-    do_event(qw(aevt odoc MACS),
-        "'----': obj{want:type(prop), from:'null'()," . 
-        "form:prop, seld:type(macs)}"
-    );
+	use Mac::AppleEvents::Simple;
+	do_event(qw(aevt odoc MACS),
+		"'----': obj{want:type(prop), from:'null'()," . 
+		"form:prop, seld:type(macs)}"
+	);
 
 =item Cool Mac::Glue method
 
-    use Mac::Glue;
-    my $glue = Mac::Glue->new('Finder');
-    $glue->open( $glue->prop('System Folder') );
+	use Mac::Glue;
+	my $glue = Mac::Glue->new('Finder');
+	$glue->open( $glue->prop('System Folder') );
 
 =back
 
@@ -1209,23 +1260,23 @@ properties), and enumerators, and descriptions of each.
 
 The first thing you do is call the module.
 
-    use Mac::Glue;
+	use Mac::Glue;
 
 Then you create an object for your app by passing the C<new> function
 the name of the glue (you may include or omit underscores in the name if
 you like).
 
-    my $glue = Mac::Glue->new('My App');  # or My_App
+	my $glue = Mac::Glue->new('My App');  # or My_App
 
 You can also pass in additional parameters for the type of target to use.
 For PPC ports, you can do this:
 
-    my $glue = Mac::Glue->new('My App', ppc => 'My App Name',
-        'Server Name', 'Zone');
+	my $glue = Mac::Glue->new('My App', ppc => 'My App Name',
+		'Server Name', 'Zone');
 
 You may also specify a process serial number:
 
-    my $glue = Mac::Glue->new('My App', psn => $psn);
+	my $glue = Mac::Glue->new('My App', psn => $psn);
 
 Note that C<$psn> should be a regular long integer, and will be packed into
 a double long behind the scenes.  If this confuses you, don't worry about
@@ -1234,12 +1285,12 @@ back in as C<$psn>.
 
 You can also pass a path to an application:
 
-    my $glue = Mac::Glue->new('My App', path => $path_to_file);
+	my $glue = Mac::Glue->new('My App', path => $path_to_file);
 
 New for Mac OS 9, you can send events over TCP/IP:
 
-    my $glue = Mac::Glue->new('My App', eppc => 'My App Name',
-        'some.machine.com');
+	my $glue = Mac::Glue->new('My App', eppc => 'My App Name',
+		'some.machine.com');
 
 
 Once you have your glue set up, you start calling events, as they are
@@ -1250,9 +1301,9 @@ case, since the special methods are in all caps, the event methods can
 be called case-insensitively except for all caps.  e.g., for an event
 named C<reply>, it could be called with:
 
-    $glue->Reply;
-    $glue->reply;
-    $glue->RePLY;
+	$glue->Reply;
+	$glue->reply;
+	$glue->RePLY;
 
 However, it could not be called with C<$glue-E<gt>REPLY>, since that
 is reserved.
@@ -1267,13 +1318,13 @@ parameter of most events is a special parameter called the I<direct
 object> parameter.  In your event call, pass the data for that parameter
 first:
 
-    $glue->open($file);
+	$glue->open($file);
 
 Other parameters must be named and must be provided as key-value pairs,
 with the key as the name of the parameter, and the value as the
 parameter's data:
 
-    $glue->open($file, using => $myapp);
+	$glue->open($file, using => $myapp);
 
 Note that the direct object parameter is the only parameter that doesn't
 need a name in front of it, and must come first in the list if it is
@@ -1287,7 +1338,7 @@ You can override this behavior with the C<param_type> function.  If
 C<open> expects an alias (C<typeAlias>), but you want to pass text,
 you can do:
 
-    $glue->open( param_type($path, typeChar) );
+	$glue->open( param_type($path, typeChar) );
 
 Each datum can be a simple scalar as above, an AEDesc object,
 an Mac::AEObjDesc object (returned by C<obj>, C<prop>, and event methods),
@@ -1296,8 +1347,8 @@ reference, corresponding to AE lists and records.  In this example, we
 nest them, with an arrayref as one of the values in the hashref, so the
 AE list is a datum for one of the keys in the AE record:
 
-    $glue->make(new => 'window', with_properties =>
-        {name => "New Window", position => [100, 200]});
+	$glue->make(new => 'window', with_properties =>
+		{name => "New Window", position => [100, 200]});
 
 The words "name" and "position" will be changed into the proper
 corresponding AE IDs.  And on return, record keys will be changed back
@@ -1308,46 +1359,50 @@ use in the program.  Aliases are resolved into file specifications, AE
 records and lists are turned into Perl hashes and arrays (recursively,
 for nested lists), etc.
 
-    my @urls = $sherlock->search_internet('AltaVista',
-        'for' => 'Mac::Glue');
+	my @urls = $sherlock->search_internet('AltaVista',
+		'for' => 'Mac::Glue');
 
 AE objects (which will be discussed later) are returned as C<Mac::AEObjDesc>
 objects, so they may be used again by being passed back to another
 event.
 
-    my $window_object = $glue->get( window => 1 );
-    $glue->save($window_object);
+	my $window_object = $glue->get( window => 1 );
+	$glue->save($window_object);
 
 This allows AppleScript-like loops:
 
-    my @selection = $glue->get( $glue->prop(selection => of => window) );
-    my @owners;
-    for my $item (@selection) {
-        push @owners, $glue->get( $glue->obj(cell => 'Owners' => $item) );
-    }
+	my @selection = $glue->get( $glue->prop(selection => of => window) );
+	my @owners;
+	for my $item (@selection) {
+		push @owners, $glue->get( $glue->obj(cell => 'Owners' => $item) );
+	}
 
 Some objects may allow an easy way to get a human-readable form, with the
 C<as> parameter:
 
-    my $item = $glue->get( file => 1, as => 'string' );
+	my $item = $glue->get( file => 1, as => 'string' );
 
 Errors are returned in the special variable C<$^E>, which should be
 checked immediately after an event call.
 
-    $glue->close(window => 1);
-    if ($^E) {
-        warn "Couldn't close window: $^E\n";
-    }
+	$glue->close(window => 1);
+	if ($^E) {
+		warn "Couldn't close window: $^E\n";
+	}
 
 Or, if a value is expected and none is returned:
 
-    my $file = $glue->choose_file('Select a file, please.')
-        or die "No file chosen: $^E";
+	my $file = $glue->choose_file('Select a file, please.')
+		or die "No file chosen: $^E";
 
-Checking C<$^E> only works if the error returned is an error number.  If it isn't,
-the actual error is available from the reply event, which can be
-accessed by using the C<RETOBJ> parameter (described below in
-L<"Special parameters and methods">).
+Checking C<$^E> only works if the error returned is an error number.
+If it isn't, the actual error is available from the reply event,
+which can be accessed by using the C<RETOBJ> parameter (described
+below in L<"Special parameters and methods">).
+
+You can also handle errors with the C<ERRORS> handlers (also
+described below in L<"Special parameters and methods">).
+
 
 =head2 Creating object specifier records
 
@@ -1376,7 +1431,7 @@ the glue data or a good guess.  The container is determined by the order
 of the key-value pairs: each pair is contained by the pair or object that
 follows it.
 
-    my $obj = $glue->obj(file => 'foo', folder => 'bar', disk => 'buz');
+	my $obj = $glue->obj(file => 'foo', folder => 'bar', disk => 'buz');
 
 So you have three pairs.  The key of each pair ("file", "folder", "disk")
 is the class.  The value of each pair ("foo", "bar", "baz") is the data.
@@ -1401,32 +1456,32 @@ you want to send data different from how Mac::Glue would guess.
 
 These two are the same, since in the second case, the other is assumed:
 
-    use Mac::Glue ':glue';
+	use Mac::Glue ':glue';
 
-    $obj1 = $glue->obj(window =>
-        obj_form(formAbsolutePostion, typeLongInteger, 1));
+	$obj1 = $glue->obj(window =>
+		obj_form(formAbsolutePostion, typeLongInteger, 1));
 
-    $obj2 = $glue->obj(window => 1);
+	$obj2 = $glue->obj(window => 1);
 
 Special constants are exported that specify relative positions and
 absolute positions.
 
-    $first  = $glue->obj(file => gFirst, property => 'Desktop');
-    $second = $glue->obj(file => gNext, $first);
+	$first  = $glue->obj(file => gFirst, property => 'Desktop');
+	$second = $glue->obj(file => gNext, $first);
 
-    for ($first, $second) {
-        print $glue->get($_, as => 'string');
-    }
+	for ($first, $second) {
+		print $glue->get($_, as => 'string');
+	}
 
 C<of> and C<in> are synonyms of C<property>:
 
-    $glue->obj(file => gFirst, property => 'Desktop');
-    $glue->obj(file => gFirst, of => 'Desktop');
-    $glue->obj(file => gFirst, in => 'Desktop');
+	$glue->obj(file => gFirst, property => 'Desktop');
+	$glue->obj(file => gFirst, of => 'Desktop');
+	$glue->obj(file => gFirst, in => 'Desktop');
 
 The "as" parameter above has a form of type, such as:
 
-    obj_form(formPropertyID, typeType, 'string');
+	obj_form(formPropertyID, typeType, 'string');
 
 Then "string" is turned into a four-character ID behind the scenes (in
 this case, it is "TEXT").
@@ -1434,8 +1489,8 @@ this case, it is "TEXT").
 A special method called C<prop> is for specifying properties.  These are
 equivalent:
 
-    $glue->obj(property => 'Desktop');
-    $glue->prop('Desktop');
+	$glue->obj(property => 'Desktop');
+	$glue->prop('Desktop');
 
 
 =head2 Descriptor types for object specifier records
@@ -1475,9 +1530,9 @@ Note that if there is a plural form of the class name, you may use it
 to mean the same thing as "I<class> =E<gt> gAll".  These are all the
 same:
 
-    $f->obj(files => of => 'System Folder');
-    $f->obj(files => gAll, of => 'System Folder');
-    $f->obj(file => gAll, of => 'System Folder');
+	$f->obj(files => of => 'System Folder');
+	$f->obj(files => gAll, of => 'System Folder');
+	$f->obj(file => gAll, of => 'System Folder');
 
 =item Relative position
 
@@ -1492,25 +1547,25 @@ The explicit form is C<obj_form(formRelativePosition, typeEnumerated, kAENext)>.
 
 The C<range> function accepts two arguments, the start and stop ranges.
 
-    range(START, STOP)
+	range(START, STOP)
 
 Each can be a number index, an absolute position constant, a string, or
 another data type passed with C<obj_form>.  Here are a few ways to specify
 files in the System Folder:
 
-    $f->obj(files => range(1, 5), of => 'System Folder');
-    $f->obj(files => range(1, "System"), of => 'System Folder');
-    $f->obj(files => range("Finder", "System"), of => 'System Folder');
-    $f->obj(files => range(gFirst, "System"), of => 'System Folder');
+	$f->obj(files => range(1, 5), of => 'System Folder');
+	$f->obj(files => range(1, "System"), of => 'System Folder');
+	$f->obj(files => range("Finder", "System"), of => 'System Folder');
+	$f->obj(files => range(gFirst, "System"), of => 'System Folder');
 
 =item Whose tests
 
 The C<whose> function accepts either logical records or comparison
 records.
 
-    # comparison record
-    $f->obj(CLASS => whose(CLASS => VALUE, OPERATOR, VALUE));
-    $f->obj(CLASS => whose(PROPERTY, OPERATOR, VALUE));
+	# comparison record
+	$f->obj(CLASS => whose(CLASS => VALUE, OPERATOR, VALUE));
+	$f->obj(CLASS => whose(PROPERTY, OPERATOR, VALUE));
 
 PROPERTY and CLASS => VALUE work like prop() and obj().  The PROPERTY
 form is the same as C<property =E<gt> VALUE>.
@@ -1518,29 +1573,29 @@ form is the same as C<property =E<gt> VALUE>.
 OPERATOR is C<contains>, C<equals>, C<begins_with>, C<ends_with>,
 C<l_t>, C<l_e>, C<g_t>, or C<g_e>.  VALUE is the value to compare to.
 
-    # files whose name begins with "foo"
-    $f->obj(files => whose(name => begins_with => 'foo'));
+	# files whose name begins with "foo"
+	$f->obj(files => whose(name => begins_with => 'foo'));
 
-    # rows whose first cell equals "bar"
-    $f->obj(rows => whose(cell => 1 => equals => 'bar'));
+	# rows whose first cell equals "bar"
+	$f->obj(rows => whose(cell => 1 => equals => 'bar'));
 
 
 Then there is the logical record type, for use when more than one comparison
 record is needed.
 
-    # logical record
-    $f->obj(CLASS => whose(OPERATOR, LIST));
+	# logical record
+	$f->obj(CLASS => whose(OPERATOR, LIST));
 
 OPERATOR is C<AND>, C<OR>, or C<NOT>.  LIST is any number of other logical
 records or comparison records, contained in anonymous arrays.  So you can
 join any number of records together:
 
-    # words where it contains "e" and it begins with "p" and it does not end with "s"
-    $aw->obj(
-        words => whose(AND =>
-            [it => contains => 'e'], [it => begins_with => 'p'],
-            [NOT => [it => ends_with => 's']]
-        ), $text)
+	# words where it contains "e" and it begins with "p" and it does not end with "s"
+	$aw->obj(
+		words => whose(AND =>
+			[it => contains => 'e'], [it => begins_with => 'p'],
+			[NOT => [it => ends_with => 's']]
+		), $text)
 
 Note how each logical record and comparison record following each logical
 operator is in an anonymous array.  Also not how the special word "it"
@@ -1552,7 +1607,7 @@ There's one more record type that works similarly to the above object
 specifier records, but is not exactly the same thing.
 It's called an I<insertion location record>, and is created like this:
 
-    location(POSITION[, OBJECT])
+	location(POSITION[, OBJECT])
 
 POSITION is a string, and can be one of C<before>, C<after>, C<beginning>,
 or C<end>.  C<front> is a synonym for C<beginning>, and C<back> and C<behind>
@@ -1561,18 +1616,18 @@ are synonyms for C<after>.
 OBJECT is the object to be positioned against, and will be the null object
 if not supplied.
 
-    my $aw = new Mac::Glue 'AppleWorks';
-    my $text = $aw->prop(text_body => document => 1);
-    $aw->activate;
+	my $aw = new Mac::Glue 'AppleWorks';
+	my $text = $aw->prop(text_body => document => 1);
+	$aw->activate;
 
-    # note null object in location()
-    $aw->make(new => 'document', at => location('front'));
-    $aw->set($text, to => "foo bar buz baz.");
+	# note null object in location()
+	$aw->make(new => 'document', at => location('front'));
+	$aw->set($text, to => "foo bar buz baz.");
 
-    $aw->move(
-        $aw->obj(word => 4 => $text),
-        to => location(after => $aw->obj(word => 2 => $text))
-    );
+	$aw->move(
+		$aw->obj(word => 4 => $text),
+		to => location(after => $aw->obj(word => 2 => $text))
+	);
 
 
 =head2 Special parameters and methods
@@ -1582,8 +1637,8 @@ aspects of the event call's behavior.  They can be passed as parameters
 (affecting only the one event), or called as methods (which affect every
 call made from that object).  They are all upper case.
 
-    $glue->REPLY(1);            # wait for reply on all events
-    $glue->close(REPLY => 0);   # don't wait for this one event
+	$glue->REPLY(1);		# wait for reply on all events
+	$glue->close(REPLY => 0);	# don't wait for this one event
 
 =over 4
 
@@ -1602,7 +1657,7 @@ kAECanSwitchLayer>.
 Switch to the application being called.  Usually more efficient to use
 the C<activate> event:
 
-    $glue->activate;
+	$glue->activate;
 
 =item PRIORITY
 
@@ -1619,6 +1674,39 @@ Boolean, for whether or not the event call will return the direct object
 data (the default), or a Mac::AppleEvents::Simple object, containing
 references to the actual event and reply, so you can do more advanced
 things with the data if you want to.
+
+=item ERRORS
+
+A subroutine reference that will handle any errors (that is, will
+be executed only if C<$^E> is true) after the event is executed.
+Your handler will be passed 6 or more arguments:
+
+	0	The glue object
+	1	The event object (same object returned by RETOBJ)
+	2	The Glue's name
+	3	The event's name
+	4	The error message
+	5	The error number
+	6..n	Any arguments passed to the event in the first place
+
+Example:
+
+	sub error_handler {
+		my($glue, $event, $gluename, $eventname,
+			$errs, $errn, @args) = @_;
+		my $args = join ', ', @args;
+		die "$gluename->$eventname($args) event failed:\n$errs\n";
+	}
+
+	$finder->open(
+		$finder->obj( item => 'HD' ), # nothing named HD in Finder
+		ERRORS => \&error_handler
+	);
+
+Result:
+
+	# Finder->open(DOBJ, Mac::AEObjDesc=HASH(0xc4c0814)) event failed:
+	No such object (OS error -1728)
 
 =back
 
@@ -1643,8 +1731,8 @@ C<all> exports everything from Mac::AppleEvents and
 Mac::AppleEvents::Simple, including all functions and constants.
 Nothing is exported by default.
 
-    use Mac::Glue ':glue';  # good for most things
-    use Mac::Glue ':all';   # for more advanced things
+	use Mac::Glue ':glue';  # good for most things
+	use Mac::Glue ':all';   # for more advanced things
 
 
 =head1 TIPS
@@ -1757,7 +1845,13 @@ Add dynamic fetching of glues?
 
 =over 4
 
-=item v0.58, Sunday, November 16, 1999
+=item v1.00, Tuesday, September 12, 2000
+
+Added error handling via ERRORS parameter / method.
+
+General cleanup, additional examples.
+
+=item v0.58, Tuesday, November 16, 1999
 
 Change all of the classes to have C<Mac::> at the beginning of them
 (except for ones that originate elsewhere, like C<AEDesc>, et al).
@@ -1929,11 +2023,11 @@ Complete rewrite.  Too many changes to bother mentioning, because I am lazy.
 
 Added ability to use properties.  These are called with the C<p> method:
 
-    $obj->get($obj->p('label_index', item=>'HD'));
+	$obj->get($obj->p('label_index', item=>'HD'));
 
 which is equivalent to:
 
-    $obj->get($obj->o(property=>'label_index', item=>'HD'));
+	$obj->get($obj->o(property=>'label_index', item=>'HD'));
 
 =item v0.08, 10 October 1998
 
@@ -1951,7 +2045,7 @@ C<obj_form> is exported from the glue modules, and all of the functions
 and constant from C<Mac::AppleEvents> can be imported from a glue module
 with the C<:all> tag:
 
-    use Mac::Glue::SomeApp qw(:all);
+	use Mac::Glue::SomeApp qw(:all);
 
 =item v0.07, 30 September 1998
 
@@ -1969,8 +2063,8 @@ Whole bunches of changes.  Note that glues made under 0.05 no longer work.
 
 Chris Nandor E<lt>pudge@pobox.comE<gt>, http://pudge.net/
 
-Copyright (c) 1999 Chris Nandor.  All rights reserved.  This program is
-free software; you can redistribute it and/or modify it under the terms
+Copyright (c) 1998-2000 Chris Nandor.  All rights reserved.  This program
+is free software; you can redistribute it and/or modify it under the terms
 of the Artistic License, distributed with Perl.
 
 
@@ -1999,18 +2093,19 @@ Stephan Somogyi E<lt>somogyi@gyroscope.netE<gt>,
 Kevin Walker E<lt>kwalker@xmission.comE<gt>,
 Matthew Wickline E<lt>mattheww@wickline.orgE<gt>.
 
-
-
 (If I left your name out, please remind me.)
+
 
 =head1 SEE ALSO
 
 Mac::AppleEvents, Mac::AppleEvents::Simple, macperlcat, Inside Macintosh: 
 Interapplication Communication.
 
+	http://sourceforge.net/projects/mac-glue/
+
 =cut
 
 
 =head1 VERSION
 
-v0.58, Sunday, November 16, 1999
+v1.00, Tuesday, September 12, 2000
