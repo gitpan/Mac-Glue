@@ -1,0 +1,78 @@
+-----BEGIN PGP SIGNED MESSAGE-----
+
+Monday, July 12, 1999
+
+THIS IS BETA CODE.
+
+Please read this README.  Mac::Glue is not self-explanatory.  Some
+assembly is required.
+
+
+WHAT THIS IS
+- ------------
+
+It is an architecture for using Apple event terminology in MacPerl.
+It is cool.
+It is in beta.  Yay!
+
+
+GETTING STARTED
+- ---------------
+
+You need the latest cpan-mac installed.  It is cpan-mac 0.32,
+and available at:
+
+    http://www.perl.com/CPAN-local/authors/id/CNANDOR/
+
+Read the cpan-mac README for more information on it.  It contains
+all the modules you will need to use Mac::Glue (including
+some other really cool stuff).
+
+If you have installed the previous Mac::Glue distribution
+from 990622 SINCE installing cpan-mac 0.32, you will need to
+reinstall cpan-mac 0.32, as Mac::Glue 990622 probably overwrote
+newer versions with older versions of some modules.  That's life
+using alpha code!  :D
+
+Make sure in your Preferences, set site_perl as a libraries
+path (so it will come before your main MacPerl lib directory).
+
+Drop the Mac-Glue archive, or the unpacked folder, on the
+installme droplet that came with cpan-mac.
+
+After installing, you need to run the gluedialect program and then the
+gluescriptadds program.
+
+Then, for each application you want to script, drop it on the gluemac
+droplet.  Applications should not be running, in general, when dropped
+on the droplet (though in some cases it will work anyway, and in some
+cases the droplet will launch the application for you to get the
+needed information).  First program you should drop on the droplet is
+probably the Finder.  For each example script in this distribution you
+want to try, run the applications through the droplet first.
+
+
+PLAYING
+- -------
+
+Read the history in Mac:Glue.pm for what's changed, and read the code
+for the examples in ex/.
+
+Please play and read the notes and feed back to macperl-modules (see
+http://www.macperl.org/ for more details).  Feel free to send any
+feedback, including patches, to the list.
+
+- -- 
+Chris Nandor          mailto:pudge@pobox.com         http://pudge.net/
+%PGPKey = ('B76E72AD', [1024, '0824090B CE73CA10  1FF77F13 8180B6B6'])
+
+-----BEGIN PGP SIGNATURE-----
+Version: PGPfreeware 6.0.2i for non-commercial use
+Comment: Bwahahahaha!
+
+iQCVAwUBN4pUWChcZja3bnKtAQGR5AQAs1RjHbaE4dp9nHd+UC9lbtcZ0cP7st0I
+xQsqLkEIRuSLeOv9TWvqlfY3q/BPiZvbtfJVO/Kl4nLs5g4a+2MzH61AwQ+QrjFT
+qCryLkQyM3FYE60WsV/wh4ElZd9OCuJWtCXGOUHWP8Txu7O50e1KGcBWWeR2SzUp
+RBnqFDSaFv0=
+=g1dU
+-----END PGP SIGNATURE-----
