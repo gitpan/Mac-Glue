@@ -1,22 +1,26 @@
 #!perl -w
 use strict;
-use Mac::Glue;
+use File::Spec::Functions;
+use Mac::Glue ':all';
 use Mac::Files;
 use Mac::InternetConfig;
 
-my $file = FindFolder(kOnSystemDisk, kDesktopFolderType)
-    . ":Mac-Glue.html";
+my $file = catfile(
+	FindFolder(kOnSystemDisk, kDesktopFolderType),
+	"projects-1.html"
+);
 die "'$file' already exists.\n" if -e $file;
 my $map  = $InternetConfigMap{$file};
 
 my $url = new Mac::Glue 'URL Access Scripting';
 $url->activate;
 $url->download(
-    'http://pudge.net/macperl/Mac-Glue.html',
-    to => $file, progress => 1
+	'http://projects.pudge.net/',
+	to => $file, progress => 1
 );
+die $MacError if $^E;
 $url->quit;
 
 if ($map && ref $map && $map->file_creator && $map->file_type) {
-    MacPerl::SetFileInfo($map->file_creator, $map->file_type, $file);
+	MacPerl::SetFileInfo($map->file_creator, $map->file_type, $file);
 }

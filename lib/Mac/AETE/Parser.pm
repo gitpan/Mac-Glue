@@ -100,7 +100,7 @@ use Mac::Memory;
 use Carp;
 
 sub new {
-    my ($class, $handle, $target) = @_;
+    my ($class, $handle, $target, $data) = @_;
     my $self = {};
     bless $self, $class;
     
@@ -111,8 +111,10 @@ sub new {
     } else {
         $self->{_handles} = [$handle];
     }
-    $self->{_target} = $target;
+    $self->{_target}     = $target;
     $self->{_suite_list} = ();
+    $self->{ID}          = $data->{ID};
+    $self->{APPNAME}     = $data->{APPNAME};
 
     return $self;
 }
@@ -120,7 +122,8 @@ sub new {
 sub set_format
 {
     my ($self, $format) = @_;
-    
+
+    $format->{_parser}  = $self;
     $self->{_formatter} = $format;
 }
 

@@ -1,0 +1,29 @@
+#!perl -wl
+use strict;
+use Mac::Glue ':all';
+
+my $address = new Mac::Glue 'Address Book';
+
+# get the first AIM handle of the first Chris
+print $address->get( $address->prop(
+	value      => aim_handle => 1,
+	person     => 1,
+	people     => whose(first_name => equals => "Chris")
+));
+
+# get everyone
+my @people = $address->get( $address->prop('people') );
+
+# get their AIM handles
+for (@people) {
+	my $aim = $address->get( $address->prop(
+		value      => aim_handle => 1 => $_
+	));
+	if ($aim) {
+		printf "%s: %s\n", $address->get( $address->prop(
+			name => $_
+		)), $aim;
+	}
+}
+
+__END__

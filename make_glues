@@ -1,0 +1,21 @@
+#!perl -w
+use strict;
+use Mac::MoreFiles;
+
+my($lib, $script) = @ARGV;
+my @apps = 'MACS'; # Finder
+push @apps, 'sevs' if $^O ne 'MacOS'; # System Events
+my @paths = map { $Application{$_} } @apps;
+
+system($^X, $lib, "$script/gluedialect", '-I');
+
+my $aout = `$^X $lib $script/gluescriptadds -I 2>&1`;
+while ($aout =~ s!(?:^|\n).+does not appear to be an addition.+?\n  Try: blib/script/gluemac '(.+?)'\n!\n!) {
+	push @paths, $1;
+}
+$aout =~ s/^\n+//;
+print $aout;
+
+system($^X, $lib, "$script/gluemac", '-I', @paths);
+
+__END__

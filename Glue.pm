@@ -4,28 +4,21 @@ package Mac::Glue;
 # venturing within.  it might seem reasonable at first, but then you
 # get sucked in and it's all over.
 
-BEGIN {
-	use vars qw($SERIALIZER);
-	$SERIALIZER =
-		$MacPerl::Architecture eq 'MacPPC' ?
-			'Storable' :
-		$MacPerl::Architecture eq 'MacCFM68K' ?
-			'FreezeThaw' :
-		die("Must be using CFM68K or PPC build of MacPerl: $MacPerl::Architecture");
-
-}
-
+use Mac::Glue::Common ();
 use Carp;
-use Data::Dumper;
 use Exporter;
 use Fcntl;
-use Mac::AppleEvents::Simple 1.00 ':all';
-use Mac::Apps::Launch 1.70;
+use File::Basename;
+use File::Spec::Functions;
+use Mac::AppleEvents::Simple 1.03 ':all';
+use Mac::Apps::Launch 1.81;
+use Mac::Errors '$MacError';
 use Mac::Files;
 use Mac::Memory 1.20 ();
-use Mac::Processes 1.01;
+use Mac::Path::Util 0.09;
+use Mac::Processes 1.04;
 use Mac::Types;
-use MLDBM ('DB_File', $SERIALIZER);
+use MLDBM ('DB_File', $Mac::Glue::Common::SERIALIZER);
 
 use strict;
 use vars qw(
@@ -38,9 +31,9 @@ use vars qw(
 );
 
 #=============================================================================#
-# $Id: Glue.pm,v 1.6 2002/05/08 02:56:38 pudge Exp $
-($REVISION) 	= ' $Revision: 1.6 $ ' =~ /\$Revision:\s+([^\s]+)/;
-$VERSION	= '1.02';
+# $Id: Glue.pm,v 1.12 2003/05/13 04:41:11 pudge Exp $
+($REVISION) 	= ' $Revision: 1.12 $ ' =~ /\$Revision:\s+([^\s]+)/;
+$VERSION	= '1.10';
 @ISA		= 'Exporter';
 @EXPORT		= ();
 $RESERVED	= 'REPLY|SWITCH|MODE|PRIORITY|TIMEOUT|RETOBJ|ERRORS|CALLBACK|CLBK_ARG';
@@ -53,7 +46,7 @@ $RESERVED	= 'REPLY|SWITCH|MODE|PRIORITY|TIMEOUT|RETOBJ|ERRORS|CALLBACK|CLBK_ARG'
 		);
 @METHS		= qw(	ADDRESS AUTOLOAD can launch obj prop	);
 
-@EXPORT_OK	= ( @Mac::AppleEvents::EXPORT, @SYMS );
+@EXPORT_OK	= ( @Mac::AppleEvents::EXPORT, '$MacError', @SYMS );
 %EXPORT_TAGS	= (
 			all	=> [@EXPORT, @EXPORT_OK],
 			glue	=> [@EXPORT, @SYMS],
@@ -63,10 +56,6 @@ $RESERVED	= 'REPLY|SWITCH|MODE|PRIORITY|TIMEOUT|RETOBJ|ERRORS|CALLBACK|CLBK_ARG'
 
 $GENPKG		= __PACKAGE__;
 $GENSEQ		= 0;
-
-# change this if it ever works on other platforms ... Mac OS X?
-$ENV{MACGLUEDIR}	||= "$ENV{MACPERL}site_perl:Mac:Glue:glues:";
-$ENV{MACGLUEDIR}	.= ':' unless $ENV{MACGLUEDIR} =~ /:$/;
 
 #=============================================================================#
 # exported functions
@@ -143,7 +132,7 @@ sub new {
 	# find glue, try a few different names just in case
 	($app1 = $app) =~ tr/ /_/;
 	($app2 = $app) =~ tr/_/ /;
-	for (map { "$ENV{MACGLUEDIR}$_" } $app, $app1, $app2) {
+	for (map { catfile($ENV{MACGLUEDIR}, $_) } $app, $app1, $app2) {
 		if (-e) {
 			$glue = $_;
 			last;
@@ -168,7 +157,7 @@ sub new {
 		}
 	}
 
-	$self = { _DB => $db, ID => $db->{ID}, SWITCH => 0, GLUENAME => $app };
+	$self = { _DB => $db, ID => $db->{ID}, SWITCH => 0, GLUENAME => $app, APPNAME => $db->{APPNAME} };
 
 	ADDRESS($self, $addtype, @add);
 
@@ -199,6 +188,10 @@ sub ADDRESS {
 		: { $addtype => $add[0] }
 
 	: { typeApplSignature() => $self->{ID} };
+
+	if (! defined $addtype && $self->{ID} eq '????') {
+		$self->{ADDRESS} = 'PSN';
+	}
 }
 
 
@@ -229,7 +222,7 @@ sub AUTOLOAD {
 	if ($name eq 'DESTROY') {
 		return;
 	} elsif ($name =~ /^(?:$RESERVED)$/) {
-		$sub = sub { $_[0]->{$name} = $_[1] if $_[1]; $_[0]->{$name} };
+		$sub = sub { $_[0]->{$name} = $_[1] if defined $_[1]; $_[0]->{$name} };
 	}
 
 	# catch other-case versions of already-installed methods
@@ -291,6 +284,23 @@ sub _primary {
 	for (keys %xargs) {
 		delete $xargs{$_} unless /^(?:CALLBACK|CLBK_ARG)$/;
 	}
+
+	if ($self->{ADDRESS} eq 'PSN') {
+	        while (my($psn, $psi) = each %Process) {
+			if ($psi->processName eq $self->{APPNAME}) {
+				$self->{ADDRESS} = { typeProcessSerialNumber, pack_psn($psn) };
+				last;
+			}
+		}
+		if ($^O ne 'MacOS') {
+			my $path = LSFindApplicationForInfo('', '', $self->{APPNAME})
+				|| LSFindApplicationForInfo('', '', $self->{APPNAME} . '.app');
+			my $psn = _path_to_psn($path);
+			$self->{ADDRESS} = { typeProcessSerialNumber, $psn } if $psn;
+		}
+		croak "App not running" if $self->{ADDRESS} eq 'PSN';
+	}
+
 	@xargs{keys %{$self->{ADDRESS}}} = values %{$self->{ADDRESS}};
 
 	# create event (Mac::AppleEvents::Simple object)
@@ -357,6 +367,8 @@ sub _primary {
 				? 60 * $self->{TIMEOUT}
 				: kNoTimeOut;
 
+	print AEPrint($evt->{EVT}), "\n" if $self->{_print_aes};
+
 	$evt->send_event($mode, $priority, $timeout);
 
 	my $retobj = exists $hash->{RETOBJ}
@@ -404,7 +416,7 @@ sub _primary {
 			_event		=> $evt,
 			glue		=> $self->{GLUENAME},
 			event		=> $name,
-			errs		=> $^E,
+			errs		=> $MacError,
 			errn		=> $^E+0,
 			line		=> $line,
 			'package'	=> $package,
@@ -430,7 +442,18 @@ sub _params {
 
 	my($desc, $dispose) = _get_desc($self, $data, $type);
 	AEPutParamDesc($evt->{EVT}, $key, $desc)
-		or confess "Can't put $key/$desc into event: $^E";
+		or confess "Can't put $key/$desc into event: $MacError";
+
+	if ($self->{_print_aes}) {
+		print <<EOT;
+
+AEPutParamDesc($evt->{EVT}, $key, $desc);
+EOT
+		print <<EOT if $dispose;
+AEDisposeDesc($desc);
+EOT
+	}
+
 	AEDisposeDesc $desc if $dispose;
 }
 
@@ -439,13 +462,27 @@ sub _params {
 
 sub _do_list {
 	my($self, $data, $type) = @_;
-	my $list = AECreateList('', 0) or confess "Can't create list: $^E";
+	my $list = AECreateList('', 0) or confess "Can't create list: $MacError";
+	if ($self->{_print_aes}) {
+		print <<EOT;
+
+$list = AECreateList('', 0);
+EOT
+	}
 	my $count = 0;
 
 	for my $d (@{$data}) {
 		my($desc, $dispose) = _get_desc($self, $d);
 		AEPutDesc($list, ++$count, $desc)
-			or confess "Can't put $desc into $list: $^E";
+			or confess "Can't put $desc into $list: $MacError";
+		if ($self->{_print_aes}) {
+			print <<EOT;
+AEPutDesc($list, $count, $desc);
+EOT
+			print <<EOT if $dispose;
+AEDisposeDesc($desc);
+EOT
+		}
 		AEDisposeDesc $desc if $dispose;
 	}
 
@@ -457,7 +494,13 @@ sub _do_list {
 
 sub _do_rec {
 	my($self, $data, $type) = @_;
-	my $reco = AECreateList('', 1) or confess "Can't create record: $^E";
+	my $reco = AECreateList('', 1) or confess "Can't create record: $MacError";
+	if ($self->{_print_aes}) {
+		print <<EOT;
+
+$reco = AECreateList('', 1);
+EOT
+	}
 	my $class;
 
 	while (my($k, $d) = each %{$data}) {
@@ -468,13 +511,27 @@ sub _do_rec {
 		my $key = _get_id($self, $k);
 		my($desc, $dispose) = _get_desc($self, $d);
 		AEPutKeyDesc($reco, $key, $desc)
-			or confess "Can't put $key/$desc into $reco: $^E";
+			or confess "Can't put $key/$desc into $reco: $MacError";
+		if ($self->{_print_aes}) {
+			print <<EOT;
+AEPutKeyDesc($reco, $key, $desc);
+EOT
+		}
+			print <<EOT if $dispose;
+AEDisposeDesc($desc);
+EOT
 		AEDisposeDesc $desc if $dispose;
 	}
 
 	if ($class) {
 		my $nreco = AECoerceDesc($reco, $class)
-			or confess "Can't coerce to '$class': $^E";
+			or confess "Can't coerce to '$class': $MacError";
+		if ($self->{_print_aes}) {
+			print <<EOT;
+$nreco = AECoerceDesc($reco, $class);
+AEDisposeDesc($reco);
+EOT
+		}
 		AEDisposeDesc $reco;
 		$reco = $nreco;
 	}
@@ -517,6 +574,10 @@ sub _do_obj {
 
 	} else {
 		$form = formName;
+		if ($^O ne 'MacOS' && $class eq 'file') {
+			my $path = Mac::Path::Util->new($data, Mac::Path::Util::DARWIN);
+			$data = $path->mac_path;
+		}
 	}
 
 	$dataform ||=
@@ -526,24 +587,44 @@ sub _do_obj {
 		$form;
 
 	$class = $self->{NAMES}{$class};
-	$list = AECreateList('', 1) or confess "Can't create list: $^E";
+	$list = AECreateList('', 1) or confess "Can't create list: $MacError";
 
 	# form / keyAEForm
 	AEPutKey($list, keyAEForm, typeEnumerated, $form)
-		or confess "Can't put form:$form into object: $^E";
+		or confess "Can't put form:$form into object: $MacError";
 
 	# want / keyAEDesiredClass
 	AEPutKey($list, keyAEDesiredClass, typeType, $class->{id})
-		or confess "Can't put want:$class->{id} into object: $^E";
+		or confess "Can't put want:$class->{id} into object: $MacError";
+
+	if ($self->{_print_aes}) {
+		print <<EOT;
+
+$list = AECreateList('', 1);
+AEPutKey($list, keyAEForm, typeEnumerated, $form);
+AEPutKey($list, keyAEDesiredClass, typeType, $class->{id});
+EOT
+	}
 
 	# seld / keyAEKeyData
 	($d, $dataform) = _get_data($self, $data, $dataform);
 	if (ref $d eq 'AEDesc') {
 		AEPutKeyDesc($list, keyAEKeyData, $d)
-			or confess "Can't put seld:$d into object: $^E";
+			or confess "Can't put seld:$d into object: $MacError";
+		if ($self->{_print_aes}) {
+			print <<EOT;
+AEPutKeyDesc($list, keyAEKeyData, $d);
+EOT
+		}
+
 	} else {
 		AEPutKey($list, keyAEKeyData, $dataform, $d)
-			or confess "Can't put seld:$dataform($d) into object: $^E";
+			or confess "Can't put seld:$dataform($d) into object: $MacError";
+		if ($self->{_print_aes}) {
+			print <<EOT;
+AEPutKey($list, keyAEKeyData, $dataform, $d);
+EOT
+		}
 	}
 
 	# type / keyAEContainer
@@ -551,21 +632,47 @@ sub _do_obj {
 	# begin with?
 	if ($from && $from eq typeCurrentContainer) {
 		AEPutKey($list, keyAEContainer, $from, '')
-			or confess "Can't put from:$from into object: $^E";
+			or confess "Can't put from:$from into object: $MacError";
+		if ($self->{_print_aes}) {
+			print <<EOT;
+AEPutKey($list, keyAEContainer, $from, '');
+EOT
+		}
 	} elsif ($from && $from eq typeObjectBeingExamined) {
 		AEPutKey($list, keyAEContainer, $from, '')
-			or confess "Can't put from:$from into object: $^E";
+			or confess "Can't put from:$from into object: $MacError";
+		if ($self->{_print_aes}) {
+			print <<EOT;
+AEPutKey($list, keyAEContainer, $from, '');
+EOT
+		}
 	} elsif ($from) {
 		$from = _get_objdesc($from);
 		AEPutKeyDesc($list, keyAEContainer, $from)
-			or confess "Can't put from:$from into object: $^E";
+			or confess "Can't put from:$from into object: $MacError";
+		if ($self->{_print_aes}) {
+			print <<EOT;
+AEPutKeyDesc($list, keyAEContainer, $from);
+EOT
+		}
 	} else {
 		AEPutKey($list, keyAEContainer, typeNull, '')
-			or confess "Can't put from:null into object: $^E";
+			or confess "Can't put from:null into object: $MacError";
+		if ($self->{_print_aes}) {
+			print <<EOT;
+AEPutKey($list, keyAEContainer, typeNull, '');
+EOT
+		}
 	}
 
 	$obj = AECoerceDesc($list, typeObjectSpecifier)
-		or confess "Can't coerce to 'obj ': $^E";
+		or confess "Can't coerce to 'obj ': $MacError";
+	if ($self->{_print_aes}) {
+		print <<EOT;
+$obj = AECoerceDesc($list, typeObjectSpecifier);
+AEDisposeDesc($list);
+EOT
+	}
 	AEDisposeDesc $list;
 
 	return _obj_desc($self, $obj);
@@ -576,17 +683,34 @@ sub _do_obj {
 
 sub _do_loc ($;$) {
 	my($pos, $obj) = @_;
+
+	# just so we can look up _print_aes
+	my $self = ref $obj eq 'Mac::AEObjDesc' ? $obj->{GLUE} : {};
+
 	$obj = _get_objdesc($obj);
 	my $desc = ref $obj eq 'AEDesc' ? $obj : gNull();
-	my $list = AECreateList('', 1) or confess "Can't create list: $^E";
+	my $list = AECreateList('', 1) or confess "Can't create list: $MacError";
 
 	AEPutKeyDesc($list, keyAEObject, $desc)
-		or confess "Can't put object in location: $^E";
+		or confess "Can't put object in location: $MacError";
 	AEPutKey($list, keyAEPosition, typeEnumerated, $INSL{$pos} || $pos)
-		or confess "Can't put pos in location: $^E";
+		or confess "Can't put pos in location: $MacError";
 
 	my $insl = AECoerceDesc($list, typeInsertionLoc)
-		or confess "Can't coerce $list to 'obj ': $^E";
+		or confess "Can't coerce $list to 'obj ': $MacError";
+
+	if ($self->{_print_aes}) {
+		my $p = $INSL{$pos} || $pos;
+		print <<EOT;
+
+$list = AECreateList('', 1);
+AEPutKeyDesc($list, keyAEObject, $desc);
+AEPutKey($list, keyAEPosition, typeEnumerated, $p);
+$insl = AECoerceDesc($list, typeInsertionLoc);
+AEDisposeDesc($list);
+EOT
+	}
+
 	AEDisposeDesc $list;
 	_save_desc($insl);
 	return $insl;
@@ -601,15 +725,27 @@ sub _do_range {
 	$r1 = _do_obj($self, $r1, $class, typeCurrentContainer);
 	$r2 = _do_obj($self, $r2, $class, typeCurrentContainer);
 
-	my $list = AECreateList('', 1) or confess "Can't create list: $^E";
+	my $list = AECreateList('', 1) or confess "Can't create list: $MacError";
 
 	AEPutKeyDesc($list, keyAERangeStart, $r1->{DESC})
-		or confess "Can't add param to list: $^E";
+		or confess "Can't add param to list: $MacError";
 	AEPutKeyDesc($list, keyAERangeStop,  $r2->{DESC})
-		or confess "Can't add param to list: $^E";
+		or confess "Can't add param to list: $MacError";
 
 	my $rang = AECoerceDesc($list, typeRangeDescriptor)
-		or confess "Can't coerce to range: $^E";
+		or confess "Can't coerce to range: $MacError";
+
+	if ($self->{_print_aes}) {
+		print <<EOT;
+
+$list = AECreateList('', 1);
+AEPutKeyDesc($list, keyAERangeStart, $r1->{DESC});
+AEPutKeyDesc($list, keyAERangeStop,  $r2->{DESC});
+$rang = AECoerceDesc($list, typeRangeDescriptor);
+AEDisposeDesc($list);
+EOT
+	}
+
 	AEDisposeDesc $list;
 	_save_desc($rang);
 
@@ -637,6 +773,12 @@ sub _do_comp {
 
 	if ($p1 eq 'property' && $d1 eq 'it') {
 		$c1 = new AEDesc typeObjectBeingExamined;
+		if ($self->{_print_aes}) {
+			print <<EOT;
+
+$c1 = AECreateDesc(typeObjectBeingExamined);
+EOT
+		}
 		$dispose1 = 1;
 	} else {
 		$c1 = _do_obj($self, $d1, $p1, typeObjectBeingExamined)->{DESC};
@@ -648,17 +790,42 @@ sub _do_comp {
 		($c2, $dispose2) = _get_desc($self, $d2);
 	}
 
-	my $list = AECreateList('', 1) or confess "Can't create list: $^E";
+	my $list = AECreateList('', 1) or confess "Can't create list: $MacError";
 
 	AEPutKeyDesc($list, keyAECompOperator, $op);
 	AEPutKeyDesc($list, keyAEObject1, $c1);
 	AEPutKeyDesc($list, keyAEObject2, $c2);
 
+	if ($self->{_print_aes}) {
+		print <<EOT;
+
+$list = AECreateList('', 1);
+AEPutKeyDesc($list, keyAECompOperator, $op);
+AEPutKeyDesc($list, keyAEObject1, $c1);
+AEPutKeyDesc($list, keyAEObject2, $c2);
+EOT
+		
+		print <<EOT if $dispose1;
+AEDisposeDesc($c1);
+EOT
+
+		print <<EOT if $dispose2;
+AEDisposeDesc($c2);
+EOT
+	}
+
 	AEDisposeDesc $c1 if $dispose1;
 	AEDisposeDesc $c2 if $dispose2;
 
 	my $comp = AECoerceDesc($list, typeCompDescriptor)
-		or confess "Can't coerce list to comparison descriptor: $^E";
+		or confess "Can't coerce list to comparison descriptor: $MacError";
+
+	if ($self->{_print_aes}) {
+		print <<EOT;
+$comp = AECoerceDesc($list, typeCompDescriptor);
+AEDisposeDesc($list);
+EOT
+	}
 	AEDisposeDesc $list;
 	_save_desc($comp);
 
@@ -670,7 +837,14 @@ sub _do_comp {
 
 sub _do_logical {
 	my($self, $op, @args) = @_;
-	my $terms = AECreateList('', 0) or confess "Can't create list: $^E";
+	my $terms = AECreateList('', 0) or confess "Can't create list: $MacError";
+
+	if ($self->{_print_aes}) {
+		print <<EOT;
+
+$terms = AECreateList('', 0);
+EOT
+	}
 
 	unless (ref $op eq 'AEDesc') {
 		my $foo = $op;
@@ -689,16 +863,34 @@ sub _do_logical {
 			$desc = _do_logical($self, @$term);
 		}
 		AEPutDesc($terms, $i + 1, $desc);
+		if ($self->{_print_aes}) {
+			my $j = $i + 1;
+			print <<EOT;
+AEPutDesc($terms, $j, $desc);
+EOT
+		}
 	}
 
-	my $list = AECreateList('', 1) or confess "Can't create list: $^E";
+	my $list = AECreateList('', 1) or confess "Can't create list: $MacError";
 	AEPutKeyDesc($list, keyAELogicalOperator, $op);
 	AEPutKeyDesc($list, keyAELogicalTerms, $terms);
 
 	my $logi = AECoerceDesc($list, typeLogicalDescriptor)
-		or confess "Can't coerce list into logical descriptor: $^E";
+		or confess "Can't coerce list into logical descriptor: $MacError";
 	AEDisposeDesc $terms;
 	AEDisposeDesc $list;
+
+	if ($self->{_print_aes}) {
+		print <<EOT;
+$list = AECreateList('', 1);
+AEPutKeyDesc($list, keyAELogicalOperator, $op);
+AEPutKeyDesc($list, keyAELogicalTerms, $terms);
+$logi = AECoerceDesc($list, typeLogicalDescriptor);
+AEDisposeDesc($terms);
+AEDisposeDesc($list);
+EOT
+	}
+
 	_save_desc($logi);
 
 	return $logi;
@@ -746,6 +938,12 @@ sub _get_desc {
 			_save_desc($d);
 		} else {
 			$desc = AEDesc->new($t, $d);
+			if ($self->{_print_aes}) {
+				print <<EOT;
+
+$desc = AECreateDesc($t, $d);
+EOT
+			}
 		}
 	}
 
@@ -820,7 +1018,6 @@ sub _is_class {
 	my $class = $self->{CLASS}{$name} or return;
 	if (scalar keys %{$class->{properties}} > 1 ||
 		(scalar keys %{$class->{properties}} == 1 && ! exists $class->{properties}{''})) {
-#		print Dumper $class->{properties};
 		return 1;
 	}
 }
@@ -991,7 +1188,7 @@ sub _path_to_psn {
 		launchAppSpec => $path
 	);
 
-	my $psn = LaunchApplication($lp) or confess "Cannot launch '$path': $^E";
+	my $psn = LaunchApplication($lp) or confess "Cannot launch '$path': $MacError";
 
 	return pack_psn($psn);
 }
@@ -1003,9 +1200,9 @@ sub _path_to_psn {
 sub _open_others {
 	chomp(my $curdir = `pwd`);
 	my @others;
-	for my $dir (map { "$ENV{MACGLUEDIR}$_" } qw[dialects additions]) {
+	for my $dir (map { catfile($ENV{MACGLUEDIR}, $_) } qw[dialects additions]) {
 		unless (-e $dir) {
-			warn "Please run gluedialect and gluescriptadds programs."
+			warn "Please run gluedialect and gluescriptadds programs"
 				unless $Mac::Glue::CREATINGGLUES;
 			next;
 		}
@@ -1030,7 +1227,7 @@ sub _open_others {
 	chdir $curdir or confess "Can't chdir to '$curdir': $!";
 
 # would this even help anything?  BAH!
-# 	tie my %merged, 'MLDBM', "$ENV{MACGLUEDIR}gluemergecache", O_RDWR or confess "Can't tie '$_': $!";
+# 	tie my %merged, 'MLDBM', catfile($ENV{MACGLUEDIR}, "gluemergecache"), O_RDWR or confess "Can't tie '$_': $!";
 # 	if ($merged{EVENT} ne "@$OTHEREVENT" || $merged{CLASS} ne "@$OTHERCLASS" || $merged{ENUM} ne "@$OTHERENUM") {
 # 		$MERGEDCLASSES	= $merged{CLASSES} = {};
 # 		$MERGEDENUM	= $merged{ENUM} = {};
@@ -1156,8 +1353,10 @@ sub _merge_enums {
 	typeChar()		=> sub {MacPack(typeChar,		$_[0])},
 	typeFSS()		=> sub {MacPack(typeFSS,		$_[0])},
 	typeAlias()		=> sub {
-		my $alis = NewAliasMinimalFromFullPath($_[0])
-			or croak "Can't create alias for '$_[0]': $^E";
+		my $alis = -e $_[0]
+			? NewAliasMinimal($_[0])
+			: NewAliasMinimalFromFullPath($_[0]);
+		croak "Can't create alias for '$_[0]': $MacError" unless $alis;
 		return $alis->get;
 	},
 	typeWildCard()		=> sub {
@@ -1167,8 +1366,20 @@ sub _merge_enums {
 	},
 	typeProcessSerialNumber() => sub { pack_psn($_[0]) },
 
+	'file'			=> sub {
+		if ($^O ne 'MacOS') {
+			Mac::Path::Util->new($_[0])->mac_path;
+		} else {
+			return $_[0];
+		}
+	},
+
 	# just a guess here ... empty four bytes for lang code, maybe?
-	'itxt' => sub {'    ' . MacPack(typeChar, $_[0])},
+	typeIntlText()		=> sub {'    ' . MacPack(typeChar, $_[0])},
+	typeUnicodeText()	=> sub {
+		my $desc = new AEDesc typeChar, $_[0];
+		return AECoerceDesc($desc, 'utxt');
+	}
 );
 
 %DESC_TYPE = (
@@ -1229,13 +1440,16 @@ Mac::Glue - Control Mac apps with Apple event terminology
 
 "Mac::Glue does AppleScript so you don't have to."
 
-You should have the latest cpan-mac distribution:
+If you have MacPerl I<earlier> than 5.6, you should have the latest
+cpan-mac distribution:
 
-	http://sourceforge.net/projects/cpan-mac/
+	http://sf.net/projects/cpan-mac/
 
-For more information, support, CVS, etc.:
+For Mac OS X, you should have the latest Mac::Carbon distribution:
 
-	http://sourceforge.net/projects/mac-glue/
+	http://projects.pudge.net/
+
+Also see projects.pudge.net for more information, support, CVS, etc.
 
 Mac OS apps speak to each other with a I<lingua franca> called B<Apple
 events>.  The most common way to do Apple events (aside from doaing them
@@ -1260,12 +1474,15 @@ Compare.
 =item Raw Mac::AppleEvents method
 
 	use Mac::AppleEvents;
+	use Mac::Errors '$MacError';
+
 	$evt = AEBuildAppleEvent('aevt', 'odoc', typeApplSignature, 'MACS',
 		kAutoGenerateReturnID, kAnyTransactionID,
 		"'----': obj{want:type(prop), from:'null'()," . 
 		"form:prop, seld:type(macs)}"
-	) or die $^E;
-	$rep = AESend($evt, kAEWaitReply) or die $^E;
+	) or die $MacError;
+	$rep = AESend($evt, kAEWaitReply) or die $MacError;
+
 	AEDisposeDesc($evt);
 	AEDisposeDesc($rep);
 
@@ -1313,6 +1530,18 @@ We'll work to cut down that start time, too.
 
 So, now that you are convinced this is cool, let's continue.
 
+
+=head2 Mac OS X
+
+Mac::Glue is MacPerl only, and does not work with perl under Mac OS X.
+However, it works with MacPerl under the Classic environment in Mac OS X.
+Mac::Glue now has ininitial support to create glues for Mac OS X apps,
+under Classic.  You won't be able to create glues for many apps while
+running Mac OS natively, since Mac OS X will need to launch the app;
+also, there are known problems with launching the apps, so you may need
+to start the app manually first before creating the glue.
+
+
 =head2 Creating a Glue
 
 In order to script an application with Mac::Glue, a glue must be created
@@ -1321,14 +1550,15 @@ A distribution called Mac::AETE, created by David Schooley, is used to
 parse an application's AETE resource, and the glue is written out to a
 file using Storable, DB_File, and MLDBM.  Glues are saved in
 $ENV{MACGLUEDIR} (which is defined when Mac::Glue is used if it is not
-defined already).  By default, glues are stored in
-F<:site_perl:Mac:Glue:glues:>.
+defined already).  By default for MacPerl, glues are stored in
+F<:site_perl:Mac:Glue:glues:>, or in F<./Glue/glues> relative to
+F<Glue.pm> for Unix (Mac OS X).
 
 All glues have access to the global scripting additions and dialect
 information.  Glues for these must be created as well, and are created
 with the F<gluescriptadds> and F<gluedialect> programs, which are
-similar to the F<gluemac> program.  They are saved in
-"$ENV{MACGLUEDIR}additions:" and "$ENV{MACGLUEDIR}dialects:".
+similar to the F<gluemac> program.  They are saved in the directories
+F<$ENV{MACGLUEDIR}additions> and F<$ENV{MACGLUEDIR}dialects>.
 
 Along with the glue file is a POD file containing documentation for the
 glue, listing all the events (with parameters), classes (with
@@ -1466,17 +1696,18 @@ C<as> parameter:
 	my $item = $glue->get( file => 1, as => 'string' );
 
 Errors are returned in the special variable C<$^E>, which should be
-checked immediately after an event call.
+checked immediately after an event call (for portability with Mac OS X,
+use $MacError instead for the value):
 
 	$glue->close(window => 1);
 	if ($^E) {
-		warn "Couldn't close window: $^E\n";
+		warn "Couldn't close window: $MacError\n";
 	}
 
 Or, if a value is expected and none is returned:
 
 	my $file = $glue->choose_file('Select a file, please.')
-		or die "No file chosen: $^E";
+		or die "No file chosen: $MacError";
 
 Checking C<$^E> only works if the error returned is an error number.
 If it isn't, the actual error is available from the reply event,
@@ -1594,7 +1825,8 @@ use C<obj_form(formName, typeChar, 'string')>.
 
 =item Unique IDs
 
-Could be anything.
+Could be any type.  Usually you will need to use obj_form, else name or
+absolute position will be used.  Use C<obj_form(formUniqueID, TYPE, DATA)>.
 
 =item Absolute position
 
@@ -1822,13 +2054,16 @@ Nothing is exported by default.
 
 =head2 Hide background apps
 
-  use Mac::Glue;
-  use Mac::Apps::Launch;
-  $a = new Mac::Glue 'Acrobat Exchange';
-  $a->launch;
-  Hide($a->{ID});
+	use Mac::Glue;
+	use Mac::Apps::Launch;
+	$a = new Mac::Glue 'Acrobat Exchange';
+	$a->launch;
+	Hide($a->{ID});
 
-  # now do your thing ...
+	# now do your thing ...
+
+(This won't work on Mac OS X for now.)
+
 
 =head2 Scripting Addition Maintenance
 
@@ -1851,8 +2086,8 @@ unnoticable anyway.
 
 =item *
 
-MAKE SURE F<site_perl> COMES FIRST IN YOUR LIBRARY PREFERENCES.
-Thank you.  :-)
+MAKE SURE F<site_perl> COMES FIRST IN YOUR LIBRARY PREFERENCES FOR OLD
+VERSIONS OF MACPERL.  Thank you.  :-)
 
 =item *
 
@@ -1863,7 +2098,8 @@ application, and drop that on F<gluemac>.
 
 =item *
 
-You should have the latest cpan-mac distribution is installed.
+You should have the latest cpan-mac distribution is installed, for old
+versions of MacPerl.
 
 =item *
 
@@ -1926,240 +2162,25 @@ see Mac::AppleEvents::Simple) ?
 
 Add dynamic fetching of glues?
 
-=back
+=item *
 
+Make makefile stuff work with MacPerl (5.2 and 5.6 ?)
 
-=head1 HISTORY
+=item *
 
-=over 4
+More POD in modules
 
-=item v1.02, Tuesday, May 7, 2002
+=item *
 
-Skip directories when opening dialect/OSAX glues.
+More examples (iCal, iPhoto, iTunes)
 
-=item v1.01, Tuesday, January 15, 2002
+=item *
 
-Clean up a bit for 5.6.
+A real test suite (though just making sure it loads is a pretty good test :-)
 
-Add ADDRESS method.
+=item *
 
-Add checking for enumerators and classes.
-
-Make error handler work as hashref parameter list.
-
-Change license to be that of Perl.
-
-
-=item v1.00, Tuesday, September 12, 2000
-
-Added error handling via ERRORS parameter / method.
-
-General cleanup, additional examples.
-
-=item v0.58, Tuesday, November 16, 1999
-
-Change all of the classes to have C<Mac::> at the beginning of them
-(except for ones that originate elsewhere, like C<AEDesc>, et al).
-
-Added C<Mac::AEParamType> and C<param_type>.
-
-If a parameter expects an AE object specifier record, and is not passed one,
-then it guesses the type and sets it to either C<typeChar> or C<typeInteger>.
-
-Made the conversion of keys into English names recursive with lists,
-in addition to records (i.e., lists can contain multiple records).
-
-
-=item v0.57, Tuesday, November 2, 1999
-
-Added conversion of keys in returned records back into the "English" names.
-
-Records containing C<class> parameter are coerced into descriptors of
-that class (i.e., C<{name =E<gt> 'foo', class =E<gt> 'disk'}>).
-
-Added support for events over TCP/IP (Mac OS 9 required).
-
-Note: if Keychain Access is used in Mac OS 9, the C<login> method may no
-longer be required for accessing of remote machines.
-
-Fixed bug in C<can> method; also changed how C<can> calls C<AUTOLOAD>.
-
-Added code for experimental callback stuff, undocumented,
-subject to change, and probably does not even work.
-
-Changed C<_get_name> to C<_get_id>, created new C<_get_name>.
-
-Updated dialect creation code for Mac OS 9 (aeut is now stored in
-the F<AppleScript> extension instead of a dialect file, but for
-Mac::Glue is still stored in the F<dialects> folder.  Instead
-of being called F<English>, it will likely be called F<AppleScript>.
-You should delete (or archive) old dialect glues manually.
-
-
-=item v0.56, Friday, September 10, 1999
-
-If plural class is used (i.e., I<files> for I<file>), and the following value
-is not an C<AE*> object, then it will become "every I<class>".
-(Jeff Lowrey)
-
-Added more documentation about using C<AEObjDesc> objects.  (Jeff Lowrey)
-
-=item v0.55, Thursday, September 2, 1999
-
-Added extra arguments to C<new> to accept
-alternate targets.  PPC ports, PSNs, and paths are explicitly accepted now.
-(Paths are first launched, then the PSN is found ... aliases won't
-work properly as paths.)
-
-Added C<login> class method to tell MacPerl to try logging in
-with specified username and password.  Requires F<Login As>
-OSAX from the F<GTQ Scripting Library>.
-
-=item v0.51, Wednesday, September 1, 1999
-
-Changed ordering of search in C<_find_event>.
-
-Fixed doc problems in Mac::AETE::Format::Glue: inheritance
-classes are named, and optional parameters are properly
-denoted.
-
-=item v0.50, 12 July 1999
-
-Added g* constants in addition to glue* constants.  Use whichever
-you like, but I will use g* for everything.  If you don't want the
-g* constants, because they conflict with something, use the
-C<:long> and C<:longall> import tags instead of C<:glue> and C<:all>.
-
-Gone to beta!  Woo!
-
-=item v0.31, 22 June 1999
-
-Fixed bug that only found class names instead of class and property
-names in creation of object specifier records.
-
-Fixed bug which changed directories on initialization, and didn't change
-it back.
-
-Allow case-insensitive parameter names.
-
-=item v0.30, 16 June 1999
-
-Changed function names:
-C<glueInsertion> is now C<location>, C<glueRange> is now C<range>.
-
-Added C<whose> function.
-
-Added C<can> method which correctly finds available events.
-
-Made special parameters, formerly with leading underscore and lowercase,
-to all uppercase with no underscore (i.e., C<_retobj> is now C<RETOBJ>).
-
-Added C<of> and C<in> as synonyms for C<property> in C<obj> method calls.
-
-Put C<AEObjDesc> back in!  Will use in the future, maybe, to use objects
-as targets for events.
-
-Return all descriptors from C<obj> and C<prop>, and all objects
-returned from events, as C<AEObjDesc> objects.
-
-Added C<glueTrue> and C<glueFalse> constants.
-
-Tried again to suppress warnings during initial scripting additions and
-dialect creation.
-
-Tons of internal cleaning up.
-
-=item v0.26, 07 June 1999
-
-Made choice of serializer for glue more intelligent: FreezeThaw
-automatically picked for CFM68K, Storable for PPC.
-
-Updated Mac::AppleEvents and Mac::Memory, fixed more bugs and
-added constants.  Fixed bug in AutoSplit.
-
-Added C<glueInsertion>, C<glueRange>, and C<glueNull>.
-
-Completely removed C<AEObjDesc> package, which existed to support
-destruction of descriptors.  Use global hash now to keep track
-of descriptors to destroy (L<Mac::AppleEvents::Simple>).  So
-all descriptors returned from C<obj> and C<prop> and others are
-C<AEDesc> objects.
-
-Changed ordering of items in creating object specifiers in
-C<_do_obj> to match AppleScript, so comparing to Capture AE
-output would be easier.
-
-Put C<%AE_PUT> back in Mac::Glue and left C<%AE_GET> in
-Mac::AppleEvents::Simple.
-
-Switched C<DOBJ, {PARAM1 =E<gt> DATA1}> to C<DOBJ, PARAM1 =E<gt> DATA1>
-in event calls.
-
-Always default to wait for reply and no timeout if unspecified by user.
-
-Return useful errors in C<$^E>.
-
-Accept and return nested arrays/lists and hashes/records.
-
-Call events and pass classes / properties case-insensitively.
-
-
-Other miscellaneous changes.  Some cleaning up.
-
-=item v0.25, 30 May 1999
-
-Add serializer option.
-
-Updates to Mac::Memory and Mac::AppleEvents and Mac::AppleEvents::Simple.
-
-Added constants for absolute and relative positions.
-
-Added C<enum>.
-
-Put C<o> and C<p> back as C<obj> and C<prop>.
-
-Other miscellaneous changes.  Lots of cleaning up.
-
-=item v0.20, 22 May 1999
-
-Complete rewrite.  Too many changes to bother mentioning, because I am lazy.
-
-=item v0.09, 13 October 1998
-
-Added ability to use properties.  These are called with the C<p> method:
-
-	$obj->get($obj->p('label_index', item=>'HD'));
-
-which is equivalent to:
-
-	$obj->get($obj->o(property=>'label_index', item=>'HD'));
-
-=item v0.08, 10 October 1998
-
-Unreleased.
-
-Significant cleanup of module, in large part unfinished changes from
-last version.
-
-No longer doing error checking for whether lists are allowed or objects
-are allowed, because these are sometimes wrong or undetectable.  Also,
-will not raise exception on a missing required parameter, but will warn
-if C<-w> is on.
-
-C<obj_form> is exported from the glue modules, and all of the functions
-and constant from C<Mac::AppleEvents> can be imported from a glue module
-with the C<:all> tag:
-
-	use Mac::Glue::SomeApp qw(:all);
-
-=item v0.07, 30 September 1998
-
-More documentation and bugfixes.  Having serious problems with
-C<AEObjDesc::DESTROY>.
-
-=item v0.06, 29 September 1998
-
-Whole bunches of changes.  Note that glues made under 0.05 no longer work.
+Update glueedit
 
 =back
 
@@ -2168,7 +2189,7 @@ Whole bunches of changes.  Note that glues made under 0.05 no longer work.
 
 Chris Nandor E<lt>pudge@pobox.comE<gt>, http://pudge.net/
 
-Copyright (c) 1998-2002 Chris Nandor.  All rights reserved.  This program
+Copyright (c) 1998-2003 Chris Nandor.  All rights reserved.  This program
 is free software; you can redistribute it and/or modify it under the same
 terms as Perl itself.
 
@@ -2207,11 +2228,11 @@ Matthew Wickline E<lt>mattheww@wickline.orgE<gt>.
 Mac::AppleEvents, Mac::AppleEvents::Simple, macperlcat, Inside Macintosh: 
 Interapplication Communication.
 
-	http://sf.net/projects/mac-glue/
+	http://projects.pudge.net/
 
 =cut
 
 
 =head1 VERSION
 
-v1.02, Wednesday, May 7, 2002
+v1.10, Tuesday, May 13, 2003

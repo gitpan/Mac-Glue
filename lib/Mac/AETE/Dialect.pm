@@ -77,7 +77,7 @@ use Mac::Files;
 
 use Carp;
 
-@Mac::AETE::Dialect::ISA = qw (Mac::AETE::Parser);
+@Mac::AETE::Dialect::ISA = qw(Mac::AETE::Parser);
 
 sub _filter
 {
@@ -110,7 +110,13 @@ sub new {
 	}
     }
     if ($dialect_file) {
-	my $RF = OpenResFile($dialect_file);
+        my $RF;
+        if ($^O eq 'MacOS') {
+            $RF = FSpOpenResFile($dialect_file, fsRdPerm);
+        } else {
+            $RF = FSOpenResourceFile($dialect_file, "rsrc", fsRdPerm) ||
+                  FSOpenResourceFile($dialect_file, "data", fsRdPerm);
+        }
 	if (!defined($RF) || $RF == 0) {
 	    croak("No Resource Fork available for $dialect_file");
 	}
@@ -137,7 +143,13 @@ sub init
     my ($self) = @_;
     
     $self->{_handle_index} = 0;
-    my $RF = OpenResFile($self->{_target});
+    my $RF;
+    if ($^O eq 'MacOS') {
+        $RF = FSpOpenResFile($self->{_target}, fsRdPerm);
+    } else {
+        $RF = FSOpenResourceFile($self->{_target}, "rsrc", fsRdPerm) ||
+              FSOpenResourceFile($self->{_target}, "data", fsRdPerm);
+    }
     if ( !defined($RF) || $RF == 0) {
 	croak("No Resource Fork available for $self->{_target}");
     }

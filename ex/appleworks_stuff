@@ -1,4 +1,4 @@
-#!perl -wl
+#!perl -w
 use strict;
 use Mac::Glue ':glue';
 

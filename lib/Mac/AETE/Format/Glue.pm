@@ -1,11 +1,15 @@
 package Mac::AETE::Format::Glue;
+use Carp;
 use Data::Dumper;
 use Fcntl;
 use File::Basename;
 use File::Path;
+use File::Spec::Functions qw(catfile);
 use Mac::AETE::Parser;
-use Mac::Glue;
-use MLDBM ('DB_File', $Mac::Glue::SERIALIZER);
+use Mac::Glue::Common;
+use MacPerl;
+use MLDBM ('DB_File', $Mac::Glue::Common::SERIALIZER);
+use Symbol;
 
 use strict;
 use vars qw(@ISA $VERSION $TYPE);
@@ -156,7 +160,7 @@ sub finish {
 
     unlink $self->{OUTPUT} if $self->{DELETE};
 
-    if (!tie %dbm, 'MLDBM', $self->{OUTPUT}, O_CREAT|O_RDWR|O_EXCL, 0640) {
+    if (!tie %dbm, 'MLDBM', $self->{OUTPUT}, O_CREAT|O_RDWR|O_EXCL, 0644) {
         warn "Can't tie to '$self->{OUTPUT}': $!";
         return;
     }
@@ -165,14 +169,15 @@ sub finish {
     $dbm{CLASS}         = $self->{C};
     $dbm{EVENT}         = $self->{E};
     $dbm{COMPARISON}    = $self->{P};
-    $dbm{ID}            = $self->{ID};
+    $dbm{ID}            = $self->{_parser}{ID};
+    $dbm{APPNAME}       = $self->{_parser}{APPNAME};
 
-    MacPerl::SetFileInfo('McPL', $TYPE, $self->{OUTPUT});
+    MacPerl::SetFileInfo('McPL', $TYPE, $self->{OUTPUT}) if $^O eq 'MacOS';
     return 1 if $nopod;
 
     foreach (@{$self}{qw(START FINISH)}) {
         s/__APPNAME__/$self->{TITLE}/g;
-        s/__APPID__/$self->{ID}/g;
+        s/__APPID__/$self->{_parser}{ID}/g;
     }
 
     local *FILE;
@@ -183,7 +188,7 @@ sub finish {
 
     sysopen FILE, $file, O_CREAT|O_WRONLY|O_EXCL
         or die "Can't create file '$file': $!";
-    MacPerl::SetFileInfo(qw(·uck TEXT), $file);
+    MacPerl::SetFileInfo(qw(·uck TEXT), $file) if $^O eq 'MacOS';
 
     print FILE $self->{START};
     print FILE doc_events($self);
@@ -205,7 +210,7 @@ sub new {
 
 sub write_title {
     my($self, $title) = @_;
-    $self->{ID} = (MacPerl::GetFileInfo($title))[0];
+
     $self->{TITLE} = basename($self->{OUTPUT});
 }
 
