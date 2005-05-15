@@ -22,6 +22,7 @@ WriteMakefile(
     		'Mac::AppleEvents'           => 1.30,
     		'Mac::AppleEvents::Simple'   => 1.14,
     		'Mac::Files'                 => 1.09,
+    		'Mac::OSA'                   => 1.05,
     		'Mac::Processes'             => 1.04,
 		'MLDBM'                      => 0,
 		'Storable'                   => 0,

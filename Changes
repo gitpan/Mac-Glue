@@ -1,3 +1,10 @@
+* v1.24, Sunday, May 14, 2005
+
+   Rewrite Mac::AETE::App to use OSAGetAppTerminology for retrieving aete data.
+   Requires update to Mac::Carbon 0.74 (which includes Mac::OSA 1.05).
+
+   Fix some older bugs with legacy apps which have no app signature.
+
 * v1.23, Saturday, February 19, 2005
 
    Make default MODE kAECanSwitchLayer instead of kAECanInteract | kAECanSwitchLayer,

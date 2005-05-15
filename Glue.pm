@@ -16,6 +16,7 @@ use Mac::Errors qw(%MacErrors $MacError);
 use Mac::Files 1.09;
 use Mac::Gestalt;
 use Mac::Memory 1.20 ();
+use Mac::OSA 1.05 ();
 use Mac::Processes 1.04;
 use Mac::Types;
 use MLDBM ('DB_File', $Mac::Glue::Common::SERIALIZER);
@@ -32,9 +33,9 @@ use vars qw(
 );
 
 #=============================================================================#
-# $Id: Glue.pm,v 1.26 2005/02/20 06:10:17 pudge Exp $
-($REVISION) 	= ' $Revision: 1.26 $ ' =~ /\$Revision:\s+([^\s]+)/;
-$VERSION	= '1.23';
+# $Id: Glue.pm,v 1.27 2005/05/15 06:01:54 pudge Exp $
+($REVISION) 	= ' $Revision: 1.27 $ ' =~ /\$Revision:\s+([^\s]+)/;
+$VERSION	= '1.24';
 @ISA		= 'Exporter';
 @EXPORT		= ();
 $RESERVED	= 'REPLY|SWITCH|MODE|PRIORITY|TIMEOUT|RETOBJ|ERRORS|CALLBACK|CLBK_ARG';

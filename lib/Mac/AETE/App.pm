@@ -112,12 +112,14 @@ David Schooley <F<dcschooley@mediaone.net>>
 
 use strict;
 use File::Basename;
-use File::Spec::Functions qw(catfile);
+use File::Spec::Functions qw(catfile rel2abs);
 use Mac::AETE::Parser;
 use Mac::AppleEvents::Simple ':all';
+use Mac::Components;
 use Mac::Errors '$MacError';
 use Mac::Files;
 use Mac::Memory;
+use Mac::OSA;
 use Mac::Processes;
 use Mac::Resources;
 use Symbol;
@@ -131,44 +133,43 @@ sub new {
     my $self = {};
     my $aete_handle;
     
-    my($name, $running, $sign, $pname, $bundle) = &get_app_status_and_launch($target);
+    my($name, $running, $sign, $pname, $bundle, $version) = &get_app_status_and_launch($target);
     return unless $name;
 
-    $self->{_target}   = $name;
-    $self->{ID}        = $sign;
-    $self->{BUNDLE_ID} = $bundle;
-    $self->{APPNAME}   = $pname;
+    $self->{_target}   = $name;		# app name from path
+    $self->{ID}        = $sign;		# app signature
+    $self->{BUNDLE_ID} = $bundle;	# bundle ID
+    $self->{APPNAME}   = $pname;	# proper name
+    $self->{VERSION}   = $version;	# app version
 
     if ($running) {
-        ($aete_handle, $self->{VERSION}) = get_aete_via_event($target, $sign);
-        unless ($aete_handle) {
-            $aete_handle = [];
-#            carp("The application is not scriptable");
-#            return;
+        my $comp = OpenDefaultComponent(kOSAComponentType, 'ascr');
+        my $aete = OSAGetAppTerminology($comp, kOSAModeNull, $target);
+        unless ($aete) {
+    	    warn "Can't get Apple event dictionary for $target: $MacError\n";
+        	return;
         }
+
+        if ($aete->type eq typeAEList) {
+            $aete_handle = [];
+            for my $i (1 .. AECountItems($aete)) {
+                my $el = AEGetNthDesc($aete, $i);
+                push @$aete_handle, $el->data;
+                AEDisposeDesc $el;
+            }
+        } else {
+            $aete_handle = $aete->data;
+        }
+        AEDisposeDesc $aete;
     } else {
         my $RF;
         if ($^O eq 'MacOS') {
             $RF = FSpOpenResFile($self->{_target}, fsRdPerm);
         } else {
-            $RF = FSOpenResourceFile($self->{_target}, "rsrc", fsRdPerm) ||
-                  FSOpenResourceFile($self->{_target}, "data", fsRdPerm);
+            $RF = FSOpenResourceFile($self->{_target}, 'rsrc', fsRdPerm) ||
+                  FSOpenResourceFile($self->{_target}, 'data', fsRdPerm);
         }
-=pod
-
-        if ( !defined($RF) || $RF == 0) {
-            carp("No Resource Fork available for $target");
-            return;
-        }
-        my $temp_handle = Get1Resource('aete', 0);
-        if (!defined($temp_handle) || $temp_handle == 0) {
-            carp("Application '$self->{_target}' is not scriptable (App.pm)");
-            return;
-        }
-        $aete_handle = new Handle $temp_handle->get;
-        CloseResFile($RF);
-=cut
-        unless ( !defined($RF) || $RF == 0) {
+        unless (!defined($RF) || $RF == 0) {
             my $temp_handle = Get1Resource('aete', 0);
             unless (!defined($temp_handle) || $temp_handle == 0) {
                 $aete_handle = new Handle $temp_handle->get;
@@ -193,8 +194,7 @@ sub get_app_status_and_launch
 
     $running = 0;
 
-#    fileparse_set_fstype("MacOS");
-    ($name,$path,$suffix) = fileparse($app_path, "");
+    ($name,$path,$suffix) = fileparse($app_path, '');
 
     # test for package, works under Mac OS X/Classic too
     my $pkginfo = catfile($app_path, 'Contents', 'PkgInfo');
@@ -221,12 +221,13 @@ sub get_app_status_and_launch
             }
         }
 
+        my $abs_app_path = rel2abs($app_path);
         for $psn (keys %Process) {
             my $psi = $Process{$psn};
             $pname = $psi->processName;
             if ($sign eq '????') {
 	        $running = 1, $name = $pname, last
-                    if $psi->processAppSpec =~ /^\Q$app_path/;
+                    if $psi->processAppSpec =~ /^\Q$abs_app_path/;
             } else {
 	        $running = 1, $name = $pname, last
                     if $sign eq $psi->processSignature;
@@ -238,7 +239,6 @@ sub get_app_status_and_launch
         for $psn (keys %Process) {
             my $psi = $Process{$psn};
             $pname = $psi->processName;
-#            print "$pname", "   $name\n";
             $running = 1, last if $pname eq $name;
         }
     }
@@ -279,101 +279,57 @@ sub get_app_status_and_launch
         }
     }
 
+    my @add;
     for my $psn (keys %Process) {
         my $psi = $Process{$psn};
         $pname = $psi->processName;
         if (defined $sign && length($sign) && $sign ne '????') {
-            $running = 1, $name = $psi->processName,
-                last if $sign eq $psi->processSignature;
+            if ($sign eq $psi->processSignature) {
+                $running = 1;
+                $name = $psi->processName;
+                push @add, typeApplSignature, $sign;
+                last;
+            }
         } else {
-            $running = 1, $sign = $psi->processSignature,
-                last if $name eq $psi->processName;
-        }
-    }
-    $name = $app_path if $name !~ /:/;
-    ($name, $running, $sign, $pname, $bundle);
-}
-
-sub get_aete_via_event
-{
-    my($target, $sign) = @_;
-    if (!$sign) {
-        my $info = FSpGetFInfo($target);
-        $sign = $info->fdCreator;
-    }
-
-    my @add;
-    if ($sign eq '????') {
-        for my $psn (keys %Process) {
-            my $psi = $Process{$psn};
-            if ($psi->processAppSpec =~ /^\Q$target/) {
+            if ($name eq $psi->processName) {
+                $running = 1;
+                $sign = $psi->processSignature;
                 push @add, typeProcessSerialNumber, pack_psn($psn);
                 last;
             }
         }
-        die "Can't find process $target\n" unless @add;
-    } else {
-        push @add, typeApplSignature, $sign;
     }
-
-    my $event = AEBuildAppleEvent('ascr', 'gdte', @add[0, 1], kAutoGenerateReturnID, kAnyTransactionID, "'----':0");
-    my $reply = AESend($event, kAEWaitReply);
-    my @handles;
-    if ($reply) {
-        my $result_desc = AEGetParamDesc($reply, keyDirectObject)
-            or warn("Cannot get AETE: $MacError") and return;
-        if ($result_desc->type eq typeAEList) {
-            for (my $i = 1; $i <= AECountItems($result_desc); $i++) {
-                my $tmp_desc = AEGetNthDesc($result_desc, $i)
-                    or warn("Bad result from GetAETE!") and return;
-                my $aete_handle = $tmp_desc->data
-                    or warn("Bad result from GetAETE!") and return;
-                my $aete = new Handle($aete_handle->get)
-                    or warn("Bad result from GetAETE!") and return;
-                push @handles, $aete;
-            }
-       } else {
-            my $aete_handle = $result_desc->data
-                or warn("Bad result from GetAETE!") and return;
-            my $aete = new Handle($aete_handle->get)
-                or warn("Bad result from GetAETE!") and return;
-            push @handles, $aete;
-        }
-        AEDisposeDesc $result_desc;
-        AEDisposeDesc $reply;
-    } else {
-        warn("Cannot get AETE: $MacError");
-        return;
-    }
-    AEDisposeDesc $event;
 
     my $vers;
-    $event = AEBuildAppleEvent('core', 'getd', @add[0, 1], kAutoGenerateReturnID, kAnyTransactionID,
-        "'----':obj {want:type(prop), form:prop, seld:type(vers), from:'null'()}");
-    $reply = AESend($event, kAEWaitReply);
-    if ($reply) {
-#        print AEPrint($reply), "\n";
-        my($result_desc, $type);
-        if ($result_desc = AEGetParamDesc($reply, keyDirectObject)) {
-            $vers = $result_desc->get;
-            if ($result_desc->type eq 'vers') {
-                my @l = split(//, unpack("a7", $vers));
-                $vers = unpack("x7a@{[ord($l[6])]}", $vers);
-            } elsif ($result_desc->type eq 'utxt') {
-            	my $char = AECoerceDesc($result_desc, typeChar);
-            	$vers = $char->get;
+    if ($running) {
+        my($event, $reply, @handles);
+        $event = AEBuildAppleEvent('core', 'getd', @add[0, 1], kAutoGenerateReturnID, kAnyTransactionID,
+            "'----':obj {want:type(prop), form:prop, seld:type(vers), from:'null'()}");
+        $reply = AESend($event, kAEWaitReply);
+        if ($reply) {
+            my($result_desc, $type);
+            if ($result_desc = AEGetParamDesc($reply, keyDirectObject)) {
+                $vers = $result_desc->get;
+                if ($result_desc->type eq 'vers') {
+                    my @l = split(//, unpack("a7", $vers));
+                    $vers = unpack("x7a@{[ord($l[6])]}", $vers);
+                } elsif ($result_desc->type eq 'utxt') {
+                	my $char = AECoerceDesc($result_desc, typeChar);
+                	$vers = $char->get;
+                }
             }
-        }
 
-        if ($result_desc) {
-            AEDisposeDesc $result_desc;
-        }
+            if ($result_desc) {
+                AEDisposeDesc $result_desc;
+            }
 
-        AEDisposeDesc $reply;
+            AEDisposeDesc $reply;
+        }
+        AEDisposeDesc $event;
     }
-    AEDisposeDesc $event;
 
-    (\@handles, $vers);
+    $name = $app_path if $name !~ /:/;
+    ($name, $running, $sign, $pname, $bundle, $vers);
 }
 
 1;
