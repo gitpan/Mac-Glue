@@ -142,6 +142,9 @@ sub new {
     $self->{APPNAME}   = $pname;	# proper name
     $self->{VERSION}   = $version;	# app version
 
+#use Data::Dumper;
+#warn Dumper $self, $running;
+
     if ($running) {
         my $comp = OpenDefaultComponent(kOSAComponentType, 'ascr');
         my $aete = OSAGetAppTerminology($comp, kOSAModeNull, $target);
@@ -267,6 +270,10 @@ sub get_app_status_and_launch
             }
             $ok_to_launch = defined($check_resource) && $check_resource;
             CloseResFile($RF); # don't do anything with the resource now!
+
+            my $info = FSpGetFInfo($app_path);
+            $sign = $info->fdCreator;
+            $pname = basename($app_path);
         }
         if ($ok_to_launch) {
             $launch = new LaunchParam(
@@ -279,30 +286,28 @@ sub get_app_status_and_launch
         }
     }
 
-    my @add;
-    for my $psn (keys %Process) {
-        my $psi = $Process{$psn};
-        $pname = $psi->processName;
-        if (defined $sign && length($sign) && $sign ne '????') {
-            if ($sign eq $psi->processSignature) {
-                $running = 1;
-                $name = $psi->processName;
-                push @add, typeApplSignature, $sign;
-                last;
-            }
-        } else {
-            if ($name eq $psi->processName) {
-                $running = 1;
-                $sign = $psi->processSignature;
-                push @add, typeProcessSerialNumber, pack_psn($psn);
-                last;
-            }
-        }
-    }
-
     my $vers;
     if ($running) {
-        my($event, $reply, @handles);
+        my(@add, $event, $reply, @handles);
+
+        for my $psn (keys %Process) {
+            my $psi = $Process{$psn};
+            $pname = $psi->processName;
+            if (defined $sign && length($sign) && $sign ne '????') {
+                if ($sign eq $psi->processSignature) {
+                    $name = $psi->processName;
+                    push @add, typeApplSignature, $sign;
+                    last;
+                }
+            } else {
+                if ($name eq $psi->processName) {
+                    $sign = $psi->processSignature;
+                    push @add, typeProcessSerialNumber, pack_psn($psn);
+                    last;
+                }
+            }
+        }
+
         $event = AEBuildAppleEvent('core', 'getd', @add[0, 1], kAutoGenerateReturnID, kAnyTransactionID,
             "'----':obj {want:type(prop), form:prop, seld:type(vers), from:'null'()}");
         $reply = AESend($event, kAEWaitReply);

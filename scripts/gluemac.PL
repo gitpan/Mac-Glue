@@ -25,7 +25,7 @@ no warnings 'uninitialized';
 
 BEGIN {
 	($Mac::Glue::Common::PROGVERSION) =
-		' $Revision: 1.2 $ ' =~ /\$Revision:\s+([^\s]+)/;
+		' $Revision: 1.3 $ ' =~ /\$Revision:\s+([^\s]+)/;
 	$Mac::Glue::Common::PROGDESC = <<'EOT';
 Creates application glues for use with Mac::Glue.  Pass in scriptable
 applications on the command line.
@@ -55,7 +55,7 @@ sub gluecheck {
 
 	my @paths;
 	opendir my $dh, $MACGLUEDIR or die $!;
-	for my $name (readdir $dh) {
+	for my $name (sort readdir $dh) {
 		next if $name =~ /\.pod$/;
 		next unless -f catfile($MACGLUEDIR, $name);
 		next if $name eq 'FontSyncScripting'; # something's wrong ... ?
@@ -91,11 +91,13 @@ sub _get_path {
 	my($glue) = @_;
 	my $path;
 	if ($glue->{ID} && $glue->{ID} ne '????') {
-		$path = LSFindApplicationForInfo($glue->{ID});
-	} else {
-		$path ||=  LSFindApplicationForInfo('', '', $glue->{APPNAME})
-			|| LSFindApplicationForInfo('', '', $glue->{APPNAME} . '.app');
+		if (length($glue->{ID}) == 4) {
+			$path = LSFindApplicationForInfo($glue->{ID});
+		}
+		$path ||= LSFindApplicationForInfo('', $glue->{ID});
 	}
+	$path ||= LSFindApplicationForInfo('', '', $glue->{APPNAME});
+	$path ||= LSFindApplicationForInfo('', '', $glue->{APPNAME} . '.app');
 	return $path;
 }
 

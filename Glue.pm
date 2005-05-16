@@ -33,9 +33,9 @@ use vars qw(
 );
 
 #=============================================================================#
-# $Id: Glue.pm,v 1.27 2005/05/15 06:01:54 pudge Exp $
-($REVISION) 	= ' $Revision: 1.27 $ ' =~ /\$Revision:\s+([^\s]+)/;
-$VERSION	= '1.24';
+# $Id: Glue.pm,v 1.28 2005/05/16 19:10:10 pudge Exp $
+($REVISION) 	= ' $Revision: 1.28 $ ' =~ /\$Revision:\s+([^\s]+)/;
+$VERSION	= '1.25';
 @ISA		= 'Exporter';
 @EXPORT		= ();
 $RESERVED	= 'REPLY|SWITCH|MODE|PRIORITY|TIMEOUT|RETOBJ|ERRORS|CALLBACK|CLBK_ARG';

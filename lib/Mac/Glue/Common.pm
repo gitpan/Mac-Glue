@@ -30,8 +30,8 @@ use vars qw(
 );
 
 @EXPORT = qw(glue is_osax is_dialect opts $MACGLUEDIR);
-($REVISION) 	= ' $Revision: 1.5 $ ' =~ /\$Revision:\s+([^\s]+)/;
-$VERSION	= '1.01';
+($REVISION) 	= ' $Revision: 1.6 $ ' =~ /\$Revision:\s+([^\s]+)/;
+$VERSION	= '1.02';
 
 $PROGNAME    ||= basename($0);
 $PROGVERSION ||= $VERSION;
@@ -76,8 +76,9 @@ sub glue {
 		%files = %$files;
 	}
 
-	foreach my $drop (keys %files) {
+	foreach my $drop (sort { lc basename($a) cmp lc basename($b) } keys %files) {
 		$drop = readlink $drop while -l $drop;
+		print "Making glue for '$drop'\n";
 
 		# initialize
 		(my $ddrop = $drop) =~ s|[/:]$||;  # is dir/package ?
@@ -105,7 +106,7 @@ sub glue {
 		$fixed =~ s/_(?:app|rsrc|osax)$//;
 
 		if ($type eq 'app' && ! $opts->{I}) {
-			$fixed = MacPerl::Ask('What is the glue name?', $fixed);
+			$fixed = MacPerl::Ask("What is the glue name?", $fixed);
 		}
 
 		if (!$fixed) {
@@ -136,7 +137,7 @@ sub glue {
 
 		my $name = $file;
 		$name .= ", v$aete->{VERSION}" if $aete->{VERSION};
-		print "Created and installed \u$type glue for $name ($fixed)\n";
+		print "Created and installed \u$type glue for '$name' ($fixed)\n";
 	}
 }
 

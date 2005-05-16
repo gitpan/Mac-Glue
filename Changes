@@ -1,3 +1,12 @@
+* v1.25, Monday, May 15, 2005
+
+   Fix up some of recent fixes in Mac::AETE::App, which broke certain older apps
+   OSAXes.
+
+   Fix gluemac to get proper app path when recreating glues.
+
+   Add new browsers_open_window example.
+
 * v1.24, Sunday, May 14, 2005
 
    Rewrite Mac::AETE::App to use OSAGetAppTerminology for retrieving aete data.
