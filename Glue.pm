@@ -29,13 +29,13 @@ use vars qw(
 	$GENPKG $GENSEQ %OPENGLUES $MERGEDCLASSES $OTHEREVENT
 	$OTHERCLASS %SPECIALEVENT %SPECIALCLASS %DESCS
 	$MERGEDENUM $OTHERENUM %INSL %DESC_TYPE %COMP %LOGI
-	$RESERVED $ENCODE
+	$RESERVED $ENCODE $SYSEVT
 );
 
 #=============================================================================#
-# $Id: Glue.pm,v 1.28 2005/05/16 19:10:10 pudge Exp $
-($REVISION) 	= ' $Revision: 1.28 $ ' =~ /\$Revision:\s+([^\s]+)/;
-$VERSION	= '1.25';
+# $Id: Glue.pm,v 1.29 2006/06/20 03:08:09 pudge Exp $
+($REVISION) 	= ' $Revision: 1.29 $ ' =~ /\$Revision:\s+([^\s]+)/;
+$VERSION	= '1.26';
 @ISA		= 'Exporter';
 @EXPORT		= ();
 $RESERVED	= 'REPLY|SWITCH|MODE|PRIORITY|TIMEOUT|RETOBJ|ERRORS|CALLBACK|CLBK_ARG';
@@ -46,7 +46,7 @@ $RESERVED	= 'REPLY|SWITCH|MODE|PRIORITY|TIMEOUT|RETOBJ|ERRORS|CALLBACK|CLBK_ARG'
 			gTrue     gFalse     gNext    gPrevious
 			gFirst    gMiddle    gLast    gAny    gAll
 		);
-@METHS		= qw(	ADDRESS AUTOLOAD can launch obj prop version	);
+@METHS		= qw(	ADDRESS AUTOLOAD can launch obj prop version app_process	);
 
 @EXPORT_OK	= ( @Mac::AppleEvents::EXPORT, '%MacErrors', '$MacError', @SYMS );
 %EXPORT_TAGS	= (
@@ -514,7 +514,7 @@ sub _params {
 		}
 	}
 
-	my($desc, $dispose) = _get_desc($self, $data, $type);
+	my($desc, $dispose) = _get_desc($self, $data, $type, $key);
 	AEPutParamDesc($evt->{EVT}, $key, $desc)
 		or confess "Can't put $key/$desc into event: $MacError";
 
@@ -535,7 +535,7 @@ EOT
 # Put anon array parameter data into AE list
 
 sub _do_list {
-	my($self, $data, $type) = @_;
+	my($self, $data, $type, $key) = @_;
 	my $list = AECreateList('', 0) or confess "Can't create list: $MacError";
 	if ($self->{_print_aes}) {
 		print <<EOT;
@@ -546,7 +546,8 @@ EOT
 	my $count = 0;
 
 	for my $d (@{$data}) {
-		my($desc, $dispose) = _get_desc($self, $d, $type);
+		my $t = _get_type($self, $d, '', $key);
+		my($desc, $dispose) = _get_desc($self, $d, $t); #$type);
 		AEPutDesc($list, ++$count, $desc)
 			or confess "Can't put $desc into $list: $MacError";
 		if ($self->{_print_aes}) {
@@ -996,7 +997,7 @@ sub _do_whose {
 # return descriptor as needed
 
 sub _get_desc {
-	my($self, $data, $type) = @_;
+	my($self, $data, $type, $key) = @_;
 	my($desc, $dispose, $ref);
 
 	$dispose = 1;
@@ -1010,7 +1011,7 @@ sub _get_desc {
 	}
 
 	if ($ref eq 'ARRAY') {
-		$desc = _do_list($self, $data, $type);
+		$desc = _do_list($self, $data, $type, $key);
 	} elsif ($ref eq 'HASH') {
 		$desc = _do_rec($self, $data, $type);
 	} elsif ($ref eq 'AEDesc') {
@@ -1298,6 +1299,16 @@ sub version {
 }
 
 #=============================================================================#
+# helper method to get the application process object
+
+sub app_process {
+	my($self) = @_;
+	$SYSEVT ||= new Mac::Glue 'System Events';
+
+	return $SYSEVT->obj(application_process => $self->{APPNAME})->get;
+}
+
+#=============================================================================#
 # launch the app (done automatically when an event is called if not running)
 
 sub launch {
@@ -1305,7 +1316,7 @@ sub launch {
 	if (defined $location) {
 		LaunchSpecs($location);
 	} elsif ($self->{BUNDLE_ID}) {
-		$location = LSFindApplicationForInfo(undef, $self->{BUNDLE_ID});
+		$location = LSFindApplicationForInfo('', $self->{BUNDLE_ID});
 		LaunchSpecs($location);
 	} else {
 		LaunchApps($self->{CREATOR_ID});
@@ -2299,7 +2310,28 @@ Result:
 	e.g.,: specifier asked for the 3rd, but there are only 2. Basically,
 	this indicates a run-time resolution error.
 
+=item launch
+
+C<launch()> will launch the app, if it is not already launched.  This is
+rarely necessary, as it is done automatically when needed.
+
+
+=item version
+
+C<version()> gets the application's version, unpacking the data as
+necessary, because the data is sometimes returned in a binary format.
+
+
+=item app_process
+
+C<app_process()> returns the reference to the application process object
+in the System Events application.  See C<gluedoc System_Events> for more
+information.  Example to hide the application:
+
+	$glue->app_process->prop('visible')->set(to => 0);
+
 =back
+
 
 =head2 Editing a Glue
 

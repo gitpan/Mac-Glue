@@ -430,7 +430,7 @@ sub _get_binary() {
 
 sub _get_ID() {
     my $self = shift;
-    my $myID = $self->_scan(4);
+    my $myID = pack 'N', unpack 'L', $self->_scan(4);
     $myID;
 }
 

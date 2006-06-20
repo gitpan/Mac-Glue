@@ -19,8 +19,8 @@ WriteMakefile(
 	'PREREQ_PM'	=> {
 		'Mac::Errors'                => 0.91,
     		'Mac::Apps::Launch'          => 1.90,
-    		'Mac::AppleEvents'           => 1.30,
-    		'Mac::AppleEvents::Simple'   => 1.14,
+    		'Mac::AppleEvents'           => 1.32,
+    		'Mac::AppleEvents::Simple'   => 1.17,
     		'Mac::Files'                 => 1.09,
     		'Mac::OSA'                   => 1.05,
     		'Mac::Processes'             => 1.04,

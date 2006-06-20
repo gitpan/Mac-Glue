@@ -1,3 +1,15 @@
+* v1.26, Monday, June 19, 2006
+
+   Small endian fix for Intel (you must upgrade to Mac-Carbon-0.75 if using
+   Intel).
+
+   Add app_process() method to return the application_process object from
+   System Events (convenience method).
+
+   Some fixes for more accurate type resolution.
+
+   Improved documentation and eliminated a spurious warning.
+
 * v1.25, Monday, May 15, 2005
 
    Fix up some of recent fixes in Mac::AETE::App, which broke certain older apps
