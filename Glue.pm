@@ -33,9 +33,9 @@ use vars qw(
 );
 
 #=============================================================================#
-# $Id: Glue.pm,v 1.29 2006/06/20 03:08:09 pudge Exp $
-($REVISION) 	= ' $Revision: 1.29 $ ' =~ /\$Revision:\s+([^\s]+)/;
-$VERSION	= '1.26';
+# $Id: Glue.pm,v 1.30 2006/07/07 06:49:43 pudge Exp $
+($REVISION) 	= ' $Revision: 1.30 $ ' =~ /\$Revision:\s+([^\s]+)/;
+$VERSION	= '1.27';
 @ISA		= 'Exporter';
 @EXPORT		= ();
 $RESERVED	= 'REPLY|SWITCH|MODE|PRIORITY|TIMEOUT|RETOBJ|ERRORS|CALLBACK|CLBK_ARG';
@@ -1508,10 +1508,13 @@ sub _merge_enums {
 	},
 	typeProcessSerialNumber() => sub { pack_psn($_[0]) },
 	typeLongDateTime()	=> sub {
-		if ($^O ne 'MacOS') {
-			return pack_psn(perl2epoch($_[0], 'macos'));
+		my $ldt = $^O eq 'MacOS' ? $_[0] : perl2epoch($_[0], 'macos');
+		require Config;
+		if ($Config::Config{byteorder} eq '1234') {
+			return pack 'LL', $ldt, 0;
+		# this may break if some platform uses neither 1234 or 4321!
 		} else {
-			return pack_psn($_[0]);
+			return pack 'LL', 0, $ldt;
 		}
 	},
 

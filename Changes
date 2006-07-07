@@ -1,3 +1,7 @@
+* v1.27, Tuesday, July 6, 2006
+
+   Endian fix for typeLongDateTime.
+
 * v1.26, Monday, June 19, 2006
 
    Small endian fix for Intel (you must upgrade to Mac-Carbon-0.75 if using
