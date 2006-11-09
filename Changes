@@ -1,3 +1,10 @@
+* v1.28, Wednesday, November 8, 2006
+
+   Another endian fix, this time for UTF conversions (see comment in Glue.pm
+   for details).  (Jelte Liebrand)
+
+   Fixed prereq for Mac::AppleEvents::Simple.
+
 * v1.27, Tuesday, July 6, 2006
 
    Endian fix for typeLongDateTime.

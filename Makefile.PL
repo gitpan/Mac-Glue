@@ -18,14 +18,15 @@ WriteMakefile(
 	'MAN1PODS'		=> {},
 	'PREREQ_PM'	=> {
 		'Mac::Errors'                => 0.91,
-    		'Mac::Apps::Launch'          => 1.92,
-    		'Mac::Carbon'                => 0.77,
+		'Mac::Apps::Launch'          => 1.92,
+		'Mac::AppleEvents::Simple'   => 1.18,
+		'Mac::Carbon'                => 0.77,
 		'MLDBM'                      => 0,
 		'Storable'                   => 0,
-    		'Test::More'                 => 0,
-    		'Time::Epoch'                => 0.02,
+		'Test::More'                 => 0,
+		'Time::Epoch'                => 0.02,
 # not required, but recommended
-#    		'Encode'                     => 0,
+#		'Encode'                     => 0,
 	},
 	'clean'	=> {
 		'FILES'	=> "Mac-Glue-* @scripts .makeglues"

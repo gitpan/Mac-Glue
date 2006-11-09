@@ -33,9 +33,9 @@ use vars qw(
 );
 
 #=============================================================================#
-# $Id: Glue.pm,v 1.30 2006/07/07 06:49:43 pudge Exp $
-($REVISION) 	= ' $Revision: 1.30 $ ' =~ /\$Revision:\s+([^\s]+)/;
-$VERSION	= '1.27';
+# $Id: Glue.pm,v 1.31 2006/11/09 03:41:35 pudge Exp $
+($REVISION) 	= ' $Revision: 1.31 $ ' =~ /\$Revision:\s+([^\s]+)/;
+$VERSION	= '1.28';
 @ISA		= 'Exporter';
 @EXPORT		= ();
 $RESERVED	= 'REPLY|SWITCH|MODE|PRIORITY|TIMEOUT|RETOBJ|ERRORS|CALLBACK|CLBK_ARG';
@@ -1530,8 +1530,12 @@ sub _merge_enums {
 	typeIntlText()		=> sub {'    ' . MacPack(typeChar, $_[0])},
 	typeUnicodeText()	=> sub {
 		if ($ENCODE) {
+			# BOM sometimes causes problems, so it is optional, and
+			# we leave it off, and use native ordering explicitly
+			require Config;
+			my $bom = $Config::Config{byteorder} eq '1234' ? 'LE' : 'BE';	
 			return new AEDesc typeUnicodeText,
-				Encode::encode('UTF-16BE', $_[0]);
+				Encode::encode('UTF-16'.$bom, $_[0]);
 		} else { # oh well!
 			return new AEDesc typeChar, $_[0];
 		}
@@ -2543,7 +2547,10 @@ Bill Birkett,
 Lars Eggert,
 wren argetlahm,
 Ken Williams,
-Alan Olsen.
+Alan Olsen,
+Chris Devers,
+Kim Helliwell,
+Jelte Liebrand.
 
 (If I left your name out, please remind me.)
 
