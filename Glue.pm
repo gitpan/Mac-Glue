@@ -33,9 +33,9 @@ use vars qw(
 );
 
 #=============================================================================#
-# $Id: Glue.pm,v 1.31 2006/11/09 03:41:35 pudge Exp $
-($REVISION) 	= ' $Revision: 1.31 $ ' =~ /\$Revision:\s+([^\s]+)/;
-$VERSION	= '1.28';
+# $Id: Glue.pm,v 1.32 2007/01/03 22:12:24 pudge Exp $
+($REVISION) 	= ' $Revision: 1.32 $ ' =~ /\$Revision:\s+([^\s]+)/;
+$VERSION	= '1.30';
 @ISA		= 'Exporter';
 @EXPORT		= ();
 $RESERVED	= 'REPLY|SWITCH|MODE|PRIORITY|TIMEOUT|RETOBJ|ERRORS|CALLBACK|CLBK_ARG';
@@ -406,6 +406,11 @@ sub _primary {
 				: kNoTimeOut;
 
 	print AEPrint($evt->{EVT}), "\n" if $self->{_print_aes};
+
+	# load scripting additions
+	# XXX: do this only if necessary?
+	# kASAppleScriptSuite\kGetAEUT 
+	do_event(qw(ascr gdut), \%xargs);
 
 	$evt->send_event($mode, $priority, $timeout);
 

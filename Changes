@@ -1,3 +1,7 @@
+* v1.30, Wednesday, January 3, 2007
+
+   Dynamically load application's scripting additions before sending event.
+
 * v1.28, Wednesday, November 8, 2006
 
    Another endian fix, this time for UTF conversions (see comment in Glue.pm
